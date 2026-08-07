@@ -11,7 +11,7 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 10;  // v10: ignore ambiguous guide text references
+constexpr uint8_t BOOK_CACHE_VERSION = 11;  // v11: persist Calibre series metadata
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -194,8 +194,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   constexpr uint32_t headerASize =
       sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
   const uint32_t metadataSize = metadata.title.size() + metadata.author.size() + metadata.language.size() +
-                                metadata.coverItemHref.size() + metadata.textReferenceHref.size() +
-                                sizeof(uint32_t) * 5;
+                                metadata.series.size() + metadata.seriesIndex.size() + metadata.coverItemHref.size() +
+                                metadata.textReferenceHref.size() + sizeof(uint32_t) * 7;
   const uint32_t lutSize = sizeof(uint32_t) * spineCount + sizeof(uint32_t) * tocCount;
   const uint32_t lutOffset = headerASize + metadataSize;
 
@@ -208,6 +208,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   serialization::writeString(bookOut, metadata.title);
   serialization::writeString(bookOut, metadata.author);
   serialization::writeString(bookOut, metadata.language);
+  serialization::writeString(bookOut, metadata.series);
+  serialization::writeString(bookOut, metadata.seriesIndex);
   serialization::writeString(bookOut, metadata.coverItemHref);
   serialization::writeString(bookOut, metadata.textReferenceHref);
 
@@ -478,6 +480,8 @@ bool BookMetadataCache::load() {
   serialization::readString(bookFile, coreMetadata.title);
   serialization::readString(bookFile, coreMetadata.author);
   serialization::readString(bookFile, coreMetadata.language);
+  serialization::readString(bookFile, coreMetadata.series);
+  serialization::readString(bookFile, coreMetadata.seriesIndex);
   serialization::readString(bookFile, coreMetadata.coverItemHref);
   serialization::readString(bookFile, coreMetadata.textReferenceHref);
 
