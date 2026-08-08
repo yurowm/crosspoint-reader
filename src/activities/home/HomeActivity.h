@@ -33,12 +33,15 @@ class HomeActivity final : public Activity {
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
 
-  // Convert HomeMenuItem to menu index (used in onEnter)
+  // Convert HomeMenuItem to an action-menu index (used in onEnter). Continue
+  // Reading, when present, is the first separate row and is handled by the
+  // caller.
   static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
     int i = 0;
-    if (item == HomeMenuItem::LIBRARY) return i;
-    ++i;
+    // File Browser is no longer shown on Home. Returning Library keeps Home
+    // navigation from an already-open browser on a useful visible row.
     if (item == HomeMenuItem::FILE_BROWSER) return i;
+    if (item == HomeMenuItem::LIBRARY) return i;
     ++i;
     if (item == HomeMenuItem::RECENTS) return i;
     ++i;
@@ -54,7 +57,6 @@ class HomeActivity final : public Activity {
   static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl) {
     int i = 0;
     if (idx == i++) return HomeMenuItem::LIBRARY;
-    if (idx == i++) return HomeMenuItem::FILE_BROWSER;
     if (idx == i++) return HomeMenuItem::RECENTS;
     if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
     if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
@@ -63,7 +65,6 @@ class HomeActivity final : public Activity {
   }
   void onSelectBook(const std::string& path);
   void onLibraryOpen();
-  void onFileBrowserOpen();
   void onRecentsOpen();
   void onSettingsOpen();
   void onFileTransferOpen();
@@ -75,6 +76,7 @@ class HomeActivity final : public Activity {
   void freeCoverBuffer();     // Free the stored cover buffer
   void loadRecentBooks(int maxBooks);
   void loadRecentCovers(int coverHeight);
+  void loadCurrentBookDetails();
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

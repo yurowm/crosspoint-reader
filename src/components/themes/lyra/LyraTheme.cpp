@@ -445,96 +445,81 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                     const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                     bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
-  const int tileWidth = rect.width - 2 * LyraMetrics::values.contentSidePadding;
-  const int tileHeight = rect.height;
-  const int tileY = rect.y;
-  const bool hasContinueReading = !recentBooks.empty();
-  if (coverWidth == 0) {
-    coverWidth = LyraMetrics::values.homeCoverHeight * 0.6;
+  (void)selectorIndex;
+  (void)bufferRestored;
+  if (recentBooks.empty()) {
+    drawEmptyRecents(renderer, rect);
+    return;
   }
 
-  // Draw book card regardless, fill with message based on `hasContinueReading`
-  // Draw cover image as background if available (inside the box)
-  // Only load from SD on first render, then use stored buffer
-  if (hasContinueReading) {
-    RecentBook book = recentBooks[0];
-    if (!coverRendered) {
-      std::string coverPath = book.coverBmpPath;
-      bool hasCover = true;
-      int tileX = LyraMetrics::values.contentSidePadding;
-      if (coverPath.empty()) {
-        hasCover = false;
-      } else {
-        const std::string coverBmpPath = UITheme::getCoverThumbPath(coverPath, LyraMetrics::values.homeCoverHeight);
+  const RecentBook& book = recentBooks.front();
+  const int coverHeight = rect.height;
+  int localCoverWidth = std::max(1, coverHeight * 2 / 3);
+  bool hasCover = false;
 
-        // First time: load cover from SD and render
-        HalFile file;
-        if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
-          Bitmap bitmap(file);
-          if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-            coverWidth = bitmap.getWidth();
-            renderer.drawBitmap(bitmap, tileX + hPaddingInSelection, tileY + hPaddingInSelection, coverWidth,
-                                LyraMetrics::values.homeCoverHeight);
-          } else {
-            hasCover = false;
-          }
-          file.close();
-        }
+  if (!coverRendered && !book.coverBmpPath.empty()) {
+    const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, LyraMetrics::values.homeCoverHeight);
+    HalFile file;
+    if (Storage.openFileForRead("HOME", coverPath, file)) {
+      Bitmap bitmap(file);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok && bitmap.getWidth() > 0 && bitmap.getHeight() > 0) {
+        localCoverWidth = std::max(1, static_cast<int>(bitmap.getWidth() *
+                                                        static_cast<float>(coverHeight) / bitmap.getHeight()));
+        localCoverWidth = std::min(localCoverWidth, rect.width * 2 / 3);
+        renderer.drawBitmap(bitmap, rect.x, rect.y, localCoverWidth, coverHeight);
+        hasCover = true;
       }
+      file.close();
+    }
+  }
 
-      // Draw either way
-      renderer.drawRect(tileX + hPaddingInSelection, tileY + hPaddingInSelection, coverWidth,
-                        LyraMetrics::values.homeCoverHeight, true);
+  if (!coverRendered) {
+    if (!hasCover) {
+      renderer.fillRect(rect.x, rect.y + coverHeight / 3, localCoverWidth, coverHeight * 2 / 3, true);
+      renderer.drawIcon(CoverIcon, rect.x + 24, rect.y + 24, 32);
+    }
+    coverWidth = localCoverWidth;
+    coverBufferStored = storeCoverBuffer();
+    coverRendered = coverBufferStored;
+  }
 
-      if (!hasCover) {
-        // Render empty cover
-        renderer.fillRect(tileX + hPaddingInSelection,
-                          tileY + hPaddingInSelection + (LyraMetrics::values.homeCoverHeight / 3), coverWidth,
-                          2 * LyraMetrics::values.homeCoverHeight / 3, true);
-        renderer.drawIcon(CoverIcon, tileX + hPaddingInSelection + 24, tileY + hPaddingInSelection + 24, 32);
+  // The cached cover width is needed after the cover bitmap is restored from
+  // the framebuffer, when there is no SD-card read to recalculate it.
+  const int textX = rect.x + coverWidth + 14;
+  const int textRight = rect.x + rect.width - LyraMetrics::values.contentSidePadding;
+  const int textWidth = std::max(1, textRight - textX);
+  const int titleY = rect.y + 7;
+  const auto title = renderer.truncatedText(UI_12_FONT_ID, book.title.c_str(), textWidth, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, textX, titleY, title.c_str(), true, EpdFontFamily::BOLD);
+
+  const int authorY = titleY + renderer.getLineHeight(UI_12_FONT_ID) + 5;
+  if (!book.author.empty()) {
+    const auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
+    renderer.drawText(UI_10_FONT_ID, textX, authorY, author.c_str());
+  }
+
+  const int seriesY = authorY + renderer.getLineHeight(UI_10_FONT_ID) + 5;
+  if (!book.series.empty()) {
+    const auto series = renderer.truncatedText(SMALL_FONT_ID, book.series.c_str(), textWidth);
+    renderer.drawText(SMALL_FONT_ID, textX, seriesY, series.c_str());
+  }
+
+  if (book.started) {
+    const std::string progressText = std::to_string(book.progressPercent) + "%";
+    const int progressY = rect.y + rect.height - 7 - renderer.getLineHeight(SMALL_FONT_ID);
+    renderer.drawText(SMALL_FONT_ID, textX, progressY, progressText.c_str());
+    const int labelWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText.c_str());
+    const int barX = textX + labelWidth + 8;
+    const int barRight = textRight - 3;
+    const int barWidth = std::max(0, barRight - barX);
+    const int barY = progressY + renderer.getLineHeight(SMALL_FONT_ID) / 2 - 2;
+    if (barWidth > 0) {
+      renderer.drawRect(barX, barY, barWidth, 5);
+      const int fillWidth = std::max(0, (barWidth - 2) * book.progressPercent / 100);
+      if (fillWidth > 0) {
+        renderer.fillRect(barX + 1, barY + 1, fillWidth, 3);
       }
-
-      coverBufferStored = storeCoverBuffer();
-      coverRendered = coverBufferStored;  // Only consider it rendered if we successfully stored the buffer
     }
-
-    bool bookSelected = (selectorIndex == 0);
-
-    int tileX = LyraMetrics::values.contentSidePadding;
-    int textWidth = tileWidth - 2 * hPaddingInSelection - LyraMetrics::values.verticalSpacing - coverWidth;
-
-    if (bookSelected) {
-      // Draw selection box
-      renderer.fillRoundedRect(tileX, tileY, tileWidth, hPaddingInSelection, cornerRadius, true, true, false, false,
-                               Color::LightGray);
-      renderer.fillRectDither(tileX, tileY + hPaddingInSelection, hPaddingInSelection,
-                              LyraMetrics::values.homeCoverHeight, Color::LightGray);
-      renderer.fillRectDither(tileX + hPaddingInSelection + coverWidth, tileY + hPaddingInSelection,
-                              tileWidth - hPaddingInSelection - coverWidth, LyraMetrics::values.homeCoverHeight,
-                              Color::LightGray);
-      renderer.fillRoundedRect(tileX, tileY + LyraMetrics::values.homeCoverHeight + hPaddingInSelection, tileWidth,
-                               hPaddingInSelection, cornerRadius, false, false, true, true, Color::LightGray);
-    }
-
-    auto titleLines = renderer.wrappedText(UI_12_FONT_ID, book.title.c_str(), textWidth, 3, EpdFontFamily::BOLD);
-
-    auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
-    const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-    const int titleBlockHeight = titleLineHeight * static_cast<int>(titleLines.size());
-    const int authorHeight = book.author.empty() ? 0 : (renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2);
-    const int totalBlockHeight = titleBlockHeight + authorHeight;
-    int titleY = tileY + tileHeight / 2 - totalBlockHeight / 2;
-    const int textX = tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing;
-    for (const auto& line : titleLines) {
-      renderer.drawText(UI_12_FONT_ID, textX, titleY, line.c_str(), true, EpdFontFamily::BOLD);
-      titleY += titleLineHeight;
-    }
-    if (!book.author.empty()) {
-      titleY += renderer.getLineHeight(UI_10_FONT_ID) / 2;
-      renderer.drawText(UI_10_FONT_ID, textX, titleY, author.c_str(), true);
-    }
-  } else {
-    drawEmptyRecents(renderer, rect);
   }
 }
 

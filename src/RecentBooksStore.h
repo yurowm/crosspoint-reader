@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include <PersistableStore.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,11 @@ struct RecentBook {
   std::string title;
   std::string author;
   std::string coverBmpPath;
+  // Populated for the home card from the book cache. These values deliberately
+  // stay out of recent.json: they can always be refreshed from the source book.
+  std::string series;
+  uint8_t progressPercent = 0;
+  bool started = false;
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
