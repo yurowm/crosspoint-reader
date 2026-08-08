@@ -30,6 +30,15 @@ bool startsWithImageMediaType(const std::string& mediaType) {
 
   return true;
 }
+
+std::string trimMetadataText(const std::string& value) {
+  const auto first = std::find_if_not(value.begin(), value.end(),
+                                      [](unsigned char c) { return std::isspace(c); });
+  const auto last = std::find_if_not(value.rbegin(), value.rend(),
+                                     [](unsigned char c) { return std::isspace(c); })
+                        .base();
+  return first < last ? std::string(first, last) : std::string();
+}
 }  // namespace
 
 bool ContentOpfParser::setup() {
@@ -114,7 +123,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && strcmp(name, "dc:creator") == 0) {
+    self->currentAuthor.clear();
     self->state = IN_BOOK_AUTHOR;
+    return;
+  }
+
+  if (self->state == IN_METADATA && strcmp(name, "dc:subject") == 0) {
+    self->currentSubject.clear();
+    self->state = IN_BOOK_SUBJECT;
     return;
   }
 
@@ -357,10 +373,12 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
   }
 
   if (self->state == IN_BOOK_AUTHOR) {
-    if (!self->author.empty()) {
-      self->author.append(", ");  // Add separator for multiple authors
-    }
-    self->author.append(s, len);
+    self->currentAuthor.append(s, len);
+    return;
+  }
+
+  if (self->state == IN_BOOK_SUBJECT) {
+    self->currentSubject.append(s, len);
     return;
   }
 
@@ -398,6 +416,23 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
   }
 
   if (self->state == IN_BOOK_AUTHOR && strcmp(name, "dc:creator") == 0) {
+    const std::string author = trimMetadataText(self->currentAuthor);
+    if (!author.empty()) {
+      self->authors.push_back(author);
+      if (!self->author.empty()) {
+        self->author.append(", ");
+      }
+      self->author.append(author);
+    }
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_SUBJECT && strcmp(name, "dc:subject") == 0) {
+    const std::string subject = trimMetadataText(self->currentSubject);
+    if (!subject.empty()) {
+      self->subjects.push_back(subject);
+    }
     self->state = IN_METADATA;
     return;
   }

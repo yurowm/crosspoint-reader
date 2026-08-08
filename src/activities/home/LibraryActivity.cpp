@@ -11,10 +11,12 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <memory>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "LibraryFiltersActivity.h"
 
 namespace {
 constexpr int DIRECTORY_STACK_RESERVE = 16;
@@ -24,6 +26,7 @@ constexpr int ROW_TEXT_VERTICAL_INSET = 7;
 constexpr int TEXT_GAP = 14;
 constexpr int PROGRESS_BAR_HEIGHT = 5;
 constexpr size_t SCAN_PROGRESS_UPDATES = 10;
+constexpr unsigned long FILTER_HOLD_MS = 1000;
 
 bool isBookFile(const std::string& path) {
   return FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path) || FsHelpers::hasTxtExtension(path) ||
@@ -44,6 +47,15 @@ std::string displaySeriesIndex(std::string index) {
     index.erase(decimalPoint);
   }
   return index;
+}
+
+bool matchesSelection(const std::vector<std::string>& values, const std::set<std::string>& selected) {
+  if (selected.empty()) {
+    return true;
+  }
+  return std::any_of(values.begin(), values.end(), [&selected](const std::string& value) {
+    return selected.contains(value);
+  });
 }
 }  // namespace
 
@@ -115,8 +127,13 @@ void LibraryActivity::addBook(const std::string& path) {
     if (epub.load(true, true)) {
       if (!epub.getTitle().empty()) book.title = epub.getTitle();
       book.author = epub.getAuthor();
+      book.authors = epub.getAuthors();
+      if (book.authors.empty() && !book.author.empty()) {
+        book.authors.push_back(book.author);
+      }
       book.series = epub.getSeries();
       book.seriesIndex = epub.getSeriesIndex();
+      book.tags = epub.getSubjects();
       const std::string thumb = epub.getThumbBmpPath(140);
       if (Storage.exists(thumb.c_str()) || epub.generateThumbBmp(140)) {
         book.coverBmpPath = thumb;
@@ -231,6 +248,38 @@ void LibraryActivity::onEnter() {
 void LibraryActivity::onExit() {
   Activity::onExit();
   books.clear();
+  filters.clear();
+}
+
+bool LibraryActivity::matchesFilters(const LibraryBook& book) const {
+  if (!matchesSelection(book.authors, filters.authors)) {
+    return false;
+  }
+  if (!filters.series.empty() && !filters.series.contains(book.series)) {
+    return false;
+  }
+  return matchesSelection(book.tags, filters.tags);
+}
+
+std::vector<size_t> LibraryActivity::filteredBookIndices() const {
+  std::vector<size_t> indices;
+  indices.reserve(books.size());
+  for (size_t i = 0; i < books.size(); i++) {
+    if (matchesFilters(books[i])) {
+      indices.push_back(i);
+    }
+  }
+  return indices;
+}
+
+void LibraryActivity::openFilters() {
+  lockLongPressBack = true;
+  startActivityForResult(
+      std::make_unique<LibraryFiltersActivity>(renderer, mappedInput, books, filters), [this](const ActivityResult&) {
+        selectorIndex = 0;
+        lockLongPressBack = false;
+        requestUpdate();
+      });
 }
 
 void LibraryActivity::loop() {
@@ -239,12 +288,19 @@ void LibraryActivity::loop() {
     return;
   }
 
+  if (!lockLongPressBack && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= FILTER_HOLD_MS) {
+    openFilters();
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoHome();
     return;
   }
 
-  const int bookCount = static_cast<int>(books.size());
+  const auto bookIndices = filteredBookIndices();
+  const int bookCount = static_cast<int>(bookIndices.size());
   if (bookCount == 0) {
     return;
   }
@@ -262,7 +318,7 @@ void LibraryActivity::loop() {
   if (touch != MappedInputManager::RowTouch::None) {
     selectorIndex = static_cast<size_t>(pageStart + row);
     if (touch == MappedInputManager::RowTouch::Tap) {
-      onSelectBook(books[selectorIndex].path);
+      onSelectBook(books[bookIndices[selectorIndex]].path);
     } else {
       requestUpdate();
     }
@@ -270,7 +326,7 @@ void LibraryActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    onSelectBook(books[selectorIndex].path);
+    onSelectBook(books[bookIndices[selectorIndex]].path);
     return;
   }
 
@@ -347,64 +403,69 @@ void LibraryActivity::render(RenderLock&&) {
                                progressWidth, 16},
                           scannedBookCount, totalBookCount);
     }
-  } else if (books.empty()) {
-    UITheme::drawCenteredText(renderer, Rect{0, contentTop, pageWidth, contentHeight}, UI_12_FONT_ID,
-                              contentTop + contentHeight / 2, tr(STR_NO_LIBRARY_BOOKS));
   } else {
-    const int rowHeight = std::max(1, (contentHeight - ROW_GAP * (BOOKS_PER_PAGE - 1)) / BOOKS_PER_PAGE);
-    const int pageStart = static_cast<int>(selectorIndex / BOOKS_PER_PAGE) * BOOKS_PER_PAGE;
-    const int contentSidePadding = metrics.contentSidePadding;
-    const int rowWidth = pageWidth - contentSidePadding * 2;
-    const int coverHeight = std::max(1, rowHeight - 2);
-    const int coverWidth = std::max(1, coverHeight * 2 / 3);
-    const int textX = contentSidePadding + coverWidth + TEXT_GAP;
-    const int textWidth = pageWidth - contentSidePadding - textX;
+    const auto bookIndices = filteredBookIndices();
+    if (bookIndices.empty()) {
+      UITheme::drawCenteredText(renderer, Rect{0, contentTop, pageWidth, contentHeight}, UI_12_FONT_ID,
+                                contentTop + contentHeight / 2,
+                                filters.isActive() ? tr(STR_NO_LIBRARY_FILTERED_BOOKS) : tr(STR_NO_LIBRARY_BOOKS));
+    } else {
+      const int rowHeight = std::max(1, (contentHeight - ROW_GAP * (BOOKS_PER_PAGE - 1)) / BOOKS_PER_PAGE);
+      const int pageStart = static_cast<int>(selectorIndex / BOOKS_PER_PAGE) * BOOKS_PER_PAGE;
+      const int contentSidePadding = metrics.contentSidePadding;
+      const int rowWidth = pageWidth - contentSidePadding * 2;
+      const int coverHeight = rowHeight;
+      const int coverWidth = std::max(1, coverHeight * 2 / 3);
+      const int textX = contentSidePadding + coverWidth + TEXT_GAP;
+      const int textWidth = pageWidth - contentSidePadding - textX;
 
-    for (int index = pageStart; index < static_cast<int>(books.size()) && index < pageStart + BOOKS_PER_PAGE; index++) {
-      const int rowY = contentTop + (index - pageStart) * (rowHeight + ROW_GAP);
-      const bool selected = index == static_cast<int>(selectorIndex);
-      if (selected) {
-        renderer.fillRoundedRect(contentSidePadding, rowY, rowWidth, rowHeight, 5, Color::LightGray);
-      }
-
-      const LibraryBook& book = books[index];
-      drawBookCover(book, contentSidePadding + 1, rowY + 1, coverWidth, coverHeight);
-      renderer.drawRoundedRect(contentSidePadding, rowY, rowWidth, rowHeight, 1, 5, true);
-
-      const int titleY = rowY + ROW_TEXT_VERTICAL_INSET;
-      const auto title = renderer.truncatedText(UI_12_FONT_ID, book.title.c_str(), textWidth, EpdFontFamily::BOLD);
-      renderer.drawText(UI_12_FONT_ID, textX, titleY, title.c_str(), true, EpdFontFamily::BOLD);
-
-      const int authorY = titleY + renderer.getLineHeight(UI_12_FONT_ID) + 5;
-      if (!book.author.empty()) {
-        const auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
-        renderer.drawText(UI_10_FONT_ID, textX, authorY, author.c_str());
-      }
-
-      const int seriesY = authorY + renderer.getLineHeight(UI_10_FONT_ID) + 5;
-      if (!book.series.empty()) {
-        std::string series = book.series;
-        if (!book.seriesIndex.empty()) {
-          series += " · " + displaySeriesIndex(book.seriesIndex);
+      for (int index = pageStart; index < static_cast<int>(bookIndices.size()) && index < pageStart + BOOKS_PER_PAGE;
+           index++) {
+        const int rowY = contentTop + (index - pageStart) * (rowHeight + ROW_GAP);
+        const bool selected = index == static_cast<int>(selectorIndex);
+        if (selected) {
+          renderer.fillRoundedRect(contentSidePadding, rowY, rowWidth, rowHeight, 5, Color::LightGray);
         }
-        const auto seriesText = renderer.truncatedText(SMALL_FONT_ID, series.c_str(), textWidth);
-        renderer.drawText(SMALL_FONT_ID, textX, seriesY, seriesText.c_str());
-      }
 
-      if (book.started) {
-        const std::string progressText = std::to_string(book.progressPercent) + "%";
-        const int progressY = rowY + rowHeight - ROW_TEXT_VERTICAL_INSET - renderer.getLineHeight(SMALL_FONT_ID);
-        renderer.drawText(SMALL_FONT_ID, textX, progressY, progressText.c_str());
-        const int labelWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText.c_str());
-        const int barX = textX + labelWidth + 8;
-        const int barRight = pageWidth - contentSidePadding - 3;
-        const int barWidth = std::max(0, barRight - barX);
-        const int barY = progressY + renderer.getLineHeight(SMALL_FONT_ID) / 2 - PROGRESS_BAR_HEIGHT / 2;
-        if (barWidth > 0) {
-          renderer.drawRect(barX, barY, barWidth, PROGRESS_BAR_HEIGHT);
-          const int fillWidth = std::max(0, (barWidth - 2) * book.progressPercent / 100);
-          if (fillWidth > 0) {
-            renderer.fillRect(barX + 1, barY + 1, fillWidth, PROGRESS_BAR_HEIGHT - 2);
+        const LibraryBook& book = books[bookIndices[index]];
+        drawBookCover(book, contentSidePadding, rowY, coverWidth, coverHeight);
+        renderer.drawRoundedRect(contentSidePadding, rowY, rowWidth, rowHeight, 1, 5, true);
+
+        const int titleY = rowY + ROW_TEXT_VERTICAL_INSET;
+        const auto title = renderer.truncatedText(UI_12_FONT_ID, book.title.c_str(), textWidth, EpdFontFamily::BOLD);
+        renderer.drawText(UI_12_FONT_ID, textX, titleY, title.c_str(), true, EpdFontFamily::BOLD);
+
+        const int authorY = titleY + renderer.getLineHeight(UI_12_FONT_ID) + 5;
+        if (!book.author.empty()) {
+          const auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
+          renderer.drawText(UI_10_FONT_ID, textX, authorY, author.c_str());
+        }
+
+        const int seriesY = authorY + renderer.getLineHeight(UI_10_FONT_ID) + 5;
+        if (!book.series.empty()) {
+          std::string series = book.series;
+          if (!book.seriesIndex.empty()) {
+            series += " · " + displaySeriesIndex(book.seriesIndex);
+          }
+          const auto seriesText = renderer.truncatedText(SMALL_FONT_ID, series.c_str(), textWidth);
+          renderer.drawText(SMALL_FONT_ID, textX, seriesY, seriesText.c_str());
+        }
+
+        if (book.started) {
+          const std::string progressText = std::to_string(book.progressPercent) + "%";
+          const int progressY = rowY + rowHeight - ROW_TEXT_VERTICAL_INSET - renderer.getLineHeight(SMALL_FONT_ID);
+          renderer.drawText(SMALL_FONT_ID, textX, progressY, progressText.c_str());
+          const int labelWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText.c_str());
+          const int barX = textX + labelWidth + 8;
+          const int barRight = pageWidth - contentSidePadding - 3;
+          const int barWidth = std::max(0, barRight - barX);
+          const int barY = progressY + renderer.getLineHeight(SMALL_FONT_ID) / 2 - PROGRESS_BAR_HEIGHT / 2;
+          if (barWidth > 0) {
+            renderer.drawRect(barX, barY, barWidth, PROGRESS_BAR_HEIGHT);
+            const int fillWidth = std::max(0, (barWidth - 2) * book.progressPercent / 100);
+            if (fillWidth > 0) {
+              renderer.fillRect(barX + 1, barY + 1, fillWidth, PROGRESS_BAR_HEIGHT - 2);
+            }
           }
         }
       }

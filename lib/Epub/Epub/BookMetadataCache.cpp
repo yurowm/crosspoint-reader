@@ -11,7 +11,7 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 11;  // v11: persist Calibre series metadata
+constexpr uint8_t BOOK_CACHE_VERSION = 12;  // v12: persist individual authors and dc:subject tags
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -60,6 +60,36 @@ BookMetadataCache::TocEntry readTocEntryFrom(F& file) {
   serialization::readPod(file, entry.level);
   serialization::readPod(file, entry.spineIndex);
   return entry;
+}
+
+template <typename F>
+void writeStringList(F& file, const std::vector<std::string>& values) {
+  const uint16_t count = static_cast<uint16_t>(values.size());
+  serialization::writePod(file, count);
+  for (const auto& value : values) {
+    serialization::writeString(file, value);
+  }
+}
+
+template <typename F>
+void readStringList(F& file, std::vector<std::string>& values) {
+  uint16_t count = 0;
+  serialization::readPod(file, count);
+  values.clear();
+  values.reserve(count);
+  for (uint16_t i = 0; i < count; i++) {
+    std::string value;
+    serialization::readString(file, value);
+    values.push_back(std::move(value));
+  }
+}
+
+size_t stringListSerializedSize(const std::vector<std::string>& values) {
+  size_t size = sizeof(uint16_t);
+  for (const auto& value : values) {
+    size += sizeof(uint32_t) + value.size();
+  }
+  return size;
 }
 }  // namespace
 
@@ -195,7 +225,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
       sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
   const uint32_t metadataSize = metadata.title.size() + metadata.author.size() + metadata.language.size() +
                                 metadata.series.size() + metadata.seriesIndex.size() + metadata.coverItemHref.size() +
-                                metadata.textReferenceHref.size() + sizeof(uint32_t) * 7;
+                                metadata.textReferenceHref.size() + stringListSerializedSize(metadata.authors) +
+                                stringListSerializedSize(metadata.subjects) + sizeof(uint32_t) * 7;
   const uint32_t lutSize = sizeof(uint32_t) * spineCount + sizeof(uint32_t) * tocCount;
   const uint32_t lutOffset = headerASize + metadataSize;
 
@@ -207,9 +238,11 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // Metadata
   serialization::writeString(bookOut, metadata.title);
   serialization::writeString(bookOut, metadata.author);
+  writeStringList(bookOut, metadata.authors);
   serialization::writeString(bookOut, metadata.language);
   serialization::writeString(bookOut, metadata.series);
   serialization::writeString(bookOut, metadata.seriesIndex);
+  writeStringList(bookOut, metadata.subjects);
   serialization::writeString(bookOut, metadata.coverItemHref);
   serialization::writeString(bookOut, metadata.textReferenceHref);
 
@@ -479,9 +512,11 @@ bool BookMetadataCache::load() {
 
   serialization::readString(bookFile, coreMetadata.title);
   serialization::readString(bookFile, coreMetadata.author);
+  readStringList(bookFile, coreMetadata.authors);
   serialization::readString(bookFile, coreMetadata.language);
   serialization::readString(bookFile, coreMetadata.series);
   serialization::readString(bookFile, coreMetadata.seriesIndex);
+  readStringList(bookFile, coreMetadata.subjects);
   serialization::readString(bookFile, coreMetadata.coverItemHref);
   serialization::readString(bookFile, coreMetadata.textReferenceHref);
 

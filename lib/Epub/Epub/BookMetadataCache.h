@@ -7,15 +7,18 @@
 #include <deque>
 #include <memory>
 #include <string>
+#include <vector>
 
 class BookMetadataCache {
  public:
   struct BookMetadata {
     std::string title;
     std::string author;
+    std::vector<std::string> authors;
     std::string language;
     std::string series;
     std::string seriesIndex;
+    std::vector<std::string> subjects;
     std::string coverItemHref;
     std::string textReferenceHref;
   };

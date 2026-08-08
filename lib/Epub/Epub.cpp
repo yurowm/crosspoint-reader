@@ -78,9 +78,11 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   // mark) text renders correctly — the device fonts have no mark positioning.
   bookMetadata.title = utf8ComposeNfc(opfParser.title);
   bookMetadata.author = opfParser.author;
+  bookMetadata.authors = opfParser.authors;
   bookMetadata.language = opfParser.language;
   bookMetadata.series = opfParser.series;
   bookMetadata.seriesIndex = opfParser.seriesIndex;
+  bookMetadata.subjects = opfParser.subjects;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
 
   // Guide-based cover fallback: if no cover found via metadata/properties,
@@ -548,6 +550,15 @@ const std::string& Epub::getAuthor() const {
   return bookMetadataCache->coreMetadata.author;
 }
 
+const std::vector<std::string>& Epub::getAuthors() const {
+  static const std::vector<std::string> blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+
+  return bookMetadataCache->coreMetadata.authors;
+}
+
 const std::string& Epub::getLanguage() const {
   static std::string blank;
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
@@ -573,6 +584,15 @@ const std::string& Epub::getSeriesIndex() const {
   }
 
   return bookMetadataCache->coreMetadata.seriesIndex;
+}
+
+const std::vector<std::string>& Epub::getSubjects() const {
+  static const std::vector<std::string> blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+
+  return bookMetadataCache->coreMetadata.subjects;
 }
 
 std::string Epub::getCoverBmpPath(bool cropped) const {

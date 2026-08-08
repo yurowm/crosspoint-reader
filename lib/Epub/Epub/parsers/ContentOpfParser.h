@@ -17,6 +17,7 @@ class ContentOpfParser final : public Print {
     IN_METADATA,
     IN_BOOK_TITLE,
     IN_BOOK_AUTHOR,
+    IN_BOOK_SUBJECT,
     IN_BOOK_LANGUAGE,
     IN_MANIFEST,
     IN_SPINE,
@@ -31,6 +32,8 @@ class ContentOpfParser final : public Print {
   BookMetadataCache* cache;
   HalFile tempItemStore;
   std::string coverItemId;
+  std::string currentAuthor;
+  std::string currentSubject;
   bool hasExplicitStartReference = false;
 
   // Index for fast idref→href lookup (binary search over .items.bin)
@@ -59,9 +62,11 @@ class ContentOpfParser final : public Print {
  public:
   std::string title;
   std::string author;
+  std::vector<std::string> authors;
   std::string language;
   std::string series;
   std::string seriesIndex;
+  std::vector<std::string> subjects;
   std::string tocNcxPath;
   std::string tocNavPath;  // EPUB 3 nav document path
   std::string coverItemHref;
