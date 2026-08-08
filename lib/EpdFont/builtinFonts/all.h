@@ -16,7 +16,7 @@
 #include <builtinFonts/notoserif_18_bolditalic.h>
 #include <builtinFonts/notoserif_18_italic.h>
 #include <builtinFonts/notoserif_18_regular.h>
-#include <builtinFonts/notosans_8_regular.h>
+#include <builtinFonts/nunito_8_regular.h>
 #include <builtinFonts/notosans_12_bold.h>
 #include <builtinFonts/notosans_12_bolditalic.h>
 #include <builtinFonts/notosans_12_italic.h>
@@ -33,7 +33,7 @@
 #include <builtinFonts/notosans_18_bolditalic.h>
 #include <builtinFonts/notosans_18_italic.h>
 #include <builtinFonts/notosans_18_regular.h>
-#include <builtinFonts/ubuntu_10_bold.h>
-#include <builtinFonts/ubuntu_10_regular.h>
-#include <builtinFonts/ubuntu_12_bold.h>
-#include <builtinFonts/ubuntu_12_regular.h>
+#include <builtinFonts/nunito_10_bold.h>
+#include <builtinFonts/nunito_10_regular.h>
+#include <builtinFonts/nunito_12_bold.h>
+#include <builtinFonts/nunito_12_regular.h>
