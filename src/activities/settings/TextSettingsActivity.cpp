@@ -35,9 +35,11 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
   return fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? fontFamily : 0;
 }
 
-constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE};
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                    StrId::STR_BOOK_S_STYLE};
+constexpr int LINE_SPACING_MIN = CrossPointSettings::LINE_SPACING_MIN;
+constexpr int LINE_SPACING_MAX = CrossPointSettings::LINE_SPACING_MAX;
+constexpr int LINE_SPACING_STEP = CrossPointSettings::LINE_SPACING_STEP;
 constexpr int MARGIN_MIN = CrossPointSettings::SCREEN_MARGIN_MIN;
 constexpr int MARGIN_MAX = CrossPointSettings::SCREEN_MARGIN_MAX;
 constexpr int MARGIN_STEP = CrossPointSettings::SCREEN_MARGIN_STEP;
@@ -386,11 +388,20 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     case LayoutRow::LineSpacing:
-      optionPopup_.show(StrId::STR_LINE_SPACING, LINE_SPACING_IDS, static_cast<int>(std::size(LINE_SPACING_IDS)),
-                        SETTINGS.lineSpacing, [](int idx) {
-                          SETTINGS.lineSpacing = static_cast<uint8_t>(idx);
+      {
+        std::vector<std::string> options;
+        options.reserve((LINE_SPACING_MAX - LINE_SPACING_MIN) / LINE_SPACING_STEP + 1);
+        for (int percent = LINE_SPACING_MIN; percent <= LINE_SPACING_MAX; percent += LINE_SPACING_STEP) {
+          options.push_back(std::to_string(percent) + "%");
+        }
+        const int current =
+            (std::clamp<int>(SETTINGS.lineSpacing, LINE_SPACING_MIN, LINE_SPACING_MAX) - LINE_SPACING_MIN) /
+            LINE_SPACING_STEP;
+        optionPopup_.show(StrId::STR_LINE_SPACING, options, current, [](int idx) {
+                          SETTINGS.lineSpacing = static_cast<uint8_t>(LINE_SPACING_MIN + idx * LINE_SPACING_STEP);
                           SETTINGS.saveToFile();
                         });
+      }
       requestUpdate();
       break;
     case LayoutRow::Alignment:
@@ -422,8 +433,8 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
 std::string TextSettingsActivity::layoutValueText(int row) const {
   switch (static_cast<LayoutRow>(row)) {
     case LayoutRow::LineSpacing: {
-      const uint8_t v = SETTINGS.lineSpacing;
-      return v < std::size(LINE_SPACING_IDS) ? I18N.get(LINE_SPACING_IDS[v]) : I18N.get(StrId::STR_NORMAL);
+      const int percent = std::clamp<int>(SETTINGS.lineSpacing, LINE_SPACING_MIN, LINE_SPACING_MAX);
+      return std::to_string(percent) + "%";
     }
     case LayoutRow::ParaSpacing:
       return SETTINGS.extraParagraphSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);

@@ -172,6 +172,22 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   }
 
+  // Before line spacing became a percentage, settings stored the enum slots
+  // Tight=0, Normal=1 and Wide=2. Map those labels to their neutral percentage
+  // equivalents, then snap percentage values to the supported 5% grid.
+  const uint8_t storedLineSpacing = doc["lineSpacing"] | LINE_SPACING_DEFAULT;
+  if (storedLineSpacing <= 2) {
+    constexpr uint8_t LEGACY_LINE_SPACING[] = {95, 100, 110};
+    lineSpacing = LEGACY_LINE_SPACING[storedLineSpacing];
+    needsResave = true;
+  } else {
+    const int clampedSpacing = std::clamp<int>(storedLineSpacing, LINE_SPACING_MIN, LINE_SPACING_MAX);
+    const int spacingSteps =
+        (clampedSpacing - LINE_SPACING_MIN + LINE_SPACING_STEP / 2) / LINE_SPACING_STEP;
+    lineSpacing = static_cast<uint8_t>(LINE_SPACING_MIN + spacingSteps * LINE_SPACING_STEP);
+    if (lineSpacing != storedLineSpacing) needsResave = true;
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN, SLEEP_TIMEOUT_COUNT, (uint8_t)SLEEP_10_MIN);
@@ -265,42 +281,8 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
-  // SD card fonts use same compression as Bookerly (the most neutral values)
-  if (sdFontFamilyName[0] != '\0') {
-    switch (lineSpacing) {
-      case TIGHT:
-        return 0.95f;
-      case NORMAL:
-      default:
-        return 1.0f;
-      case WIDE:
-        return 1.1f;
-    }
-  }
-
-  switch (fontFamily) {
-    case NOTOSERIF:
-    default:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.95f;
-        case NORMAL:
-        default:
-          return 1.0f;
-        case WIDE:
-          return 1.1f;
-      }
-    case NOTOSANS:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.90f;
-        case NORMAL:
-        default:
-          return 0.95f;
-        case WIDE:
-          return 1.0f;
-      }
-  }
+  const uint8_t percent = std::clamp(lineSpacing, LINE_SPACING_MIN, LINE_SPACING_MAX);
+  return static_cast<float>(percent) / 100.0f;
 }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {
