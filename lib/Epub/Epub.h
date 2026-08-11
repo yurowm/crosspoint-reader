@@ -45,6 +45,9 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  // Loads only fields needed by library/catalog UIs. Existing book.bin files
+  // skip the spine-size pass; uncached EPUBs parse only container.xml + OPF.
+  bool loadMetadata();
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

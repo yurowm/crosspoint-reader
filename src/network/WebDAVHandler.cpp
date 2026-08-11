@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include "LibraryIndex.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
 
@@ -386,6 +387,7 @@ void WebDAVHandler::handlePut(WebServer& s) {
   }
 
   clearBookCache(path.c_str());
+  LibraryIndex::invalidate(path.c_str());
   s.send(_putExisted ? 204 : 201);
   LOG_DBG("DAV", "PUT complete: %s", path.c_str());
 }
@@ -436,6 +438,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     file.close();
     clearBookCache(path.c_str());
     if (Storage.remove(path.c_str())) {
+      LibraryIndex::invalidate(path.c_str());
       s.send(204);
     } else {
       s.send(500, "text/plain", "Failed to delete file");
@@ -548,6 +551,9 @@ void WebDAVHandler::handleMove(WebServer& s) {
   file.close();
 
   if (success) {
+    clearBookCache(dstPath.c_str());
+    LibraryIndex::invalidate(srcPath.c_str());
+    LibraryIndex::invalidate(dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     s.send(500, "text/plain", "Move failed");
@@ -642,6 +648,8 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   dstFile.close();
 
   if (copyOk) {
+    clearBookCache(dstPath.c_str());
+    LibraryIndex::invalidate(dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     Storage.remove(dstPath.c_str());

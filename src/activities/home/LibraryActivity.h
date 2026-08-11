@@ -5,21 +5,9 @@
 #include <string>
 #include <vector>
 
+#include "LibraryIndex.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
-
-struct LibraryBook {
-  std::string path;
-  std::string title;
-  std::string author;
-  std::vector<std::string> authors;
-  std::string series;
-  std::string seriesIndex;
-  std::vector<std::string> tags;
-  std::string coverBmpPath;
-  uint8_t progressPercent = 0;
-  bool started = false;
-};
 
 struct LibraryFilterState {
   std::set<std::string> authors;
@@ -36,6 +24,7 @@ struct LibraryFilterState {
 
 class LibraryActivity final : public Activity {
   static constexpr int BOOKS_PER_PAGE = 4;
+  enum class CoverAttemptResult { None, Attempted, Updated };
 
   ButtonNavigator buttonNavigator;
   std::vector<LibraryBook> books;
@@ -46,10 +35,12 @@ class LibraryActivity final : public Activity {
   bool scanning = false;
   bool lockLongPressBack = false;
   bool lockNextConfirmRelease = false;
+  bool indexDirty = false;
 
-  void scanLibrary();
-  void scanDirectory(const std::string& path, std::vector<std::string>& bookPaths);
-  void addBook(const std::string& path);
+  bool scanLibrary(bool indexLoaded);
+  bool scanDirectory(const std::string& path, std::vector<LibraryFileInfo>& bookFiles);
+  LibraryBook loadBook(const LibraryFileInfo& file);
+  CoverAttemptResult ensureNextVisibleCover();
   void openFilters();
   void drawBookCover(const LibraryBook& book, int x, int y, int width, int height) const;
   std::vector<size_t> filteredBookIndices() const;

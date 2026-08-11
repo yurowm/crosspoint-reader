@@ -5,6 +5,7 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include "LibraryIndex.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -133,6 +134,9 @@ void ClearCacheActivity::clearCache() {
     }
   }
   root.close();
+  // Reading progress and thumbnails live in the deleted per-book directories;
+  // force the catalog to rebuild rather than showing their stale indexed state.
+  Storage.remove(LibraryIndex::FILE_PATH);
 
   LOG_DBG("CLEAR_CACHE", "Cache cleared: %d removed, %d failed", clearedCount, failedCount);
 

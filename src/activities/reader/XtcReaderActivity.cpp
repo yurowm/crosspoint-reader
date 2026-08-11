@@ -16,6 +16,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "LibraryIndex.h"
 #include "MappedInputManager.h"
 #include "ProgressFile.h"
 #include "ReaderUtils.h"
@@ -50,6 +51,10 @@ void XtcReaderActivity::onExit() {
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+  if (xtc && xtc->getPageCount() > 0) {
+    const uint32_t page = std::min(currentPage, xtc->getPageCount() - 1);
+    LibraryIndex::updateProgress(xtc->getPath(), xtc->calculateProgress(page));
+  }
   xtc.reset();
 }
 

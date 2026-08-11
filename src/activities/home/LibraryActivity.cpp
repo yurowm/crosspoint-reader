@@ -12,11 +12,13 @@
 #include <array>
 #include <cstring>
 #include <memory>
+#include <unordered_map>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "LibraryFiltersActivity.h"
+#include "util/BookCacheUtils.h"
 
 namespace {
 constexpr int DIRECTORY_STACK_RESERVE = 16;
@@ -115,16 +117,22 @@ bool LibraryActivity::readXtcProgress(const Xtc& xtc, uint8_t& progressPercent) 
   return true;
 }
 
-void LibraryActivity::addBook(const std::string& path) {
+LibraryBook LibraryActivity::loadBook(const LibraryFileInfo& file) {
   LibraryBook book;
-  book.path = path;
-  book.title = filenameStem(path);
+  book.path = file.path;
+  book.fileSize = file.fileSize;
+  book.modifiedDate = file.modifiedDate;
+  book.modifiedTime = file.modifiedTime;
+  book.title = filenameStem(file.path);
 
-  if (FsHelpers::hasEpubExtension(path)) {
-    Epub epub(path, "/.crosspoint");
-    // The first library opening creates CrossPoint's normal book cache. Later
-    // openings load only that cache and do not parse the EPUB CSS.
-    if (epub.load(true, true)) {
+  if (FsHelpers::hasEpubExtension(file.path)) {
+    Epub epub(file.path, "/.crosspoint");
+    const bool hasProgress = Storage.exists((epub.getCachePath() + "/progress.bin").c_str());
+    // Started books need cumulative spine sizes to convert their saved chapter
+    // position to a whole-book percentage. Everything else takes the metadata-
+    // only path and skips the spine/TOC pass entirely.
+    const bool loadedForProgress = hasProgress && epub.load(/*buildIfMissing=*/false, /*skipLoadingCss=*/true);
+    if (loadedForProgress || epub.loadMetadata()) {
       if (!epub.getTitle().empty()) book.title = epub.getTitle();
       book.author = epub.getAuthor();
       book.authors = epub.getAuthors();
@@ -135,32 +143,35 @@ void LibraryActivity::addBook(const std::string& path) {
       book.seriesIndex = epub.getSeriesIndex();
       book.tags = epub.getSubjects();
       const std::string thumb = epub.getThumbBmpPath(140);
-      if (Storage.exists(thumb.c_str()) || epub.generateThumbBmp(140)) {
+      if (Storage.exists(thumb.c_str())) {
         book.coverBmpPath = thumb;
       }
-      book.started = readEpubProgress(epub, book.progressPercent);
+      if (loadedForProgress) {
+        book.started = readEpubProgress(epub, book.progressPercent);
+      }
     }
-  } else if (FsHelpers::hasXtcExtension(path)) {
-    Xtc xtc(path, "/.crosspoint");
+  } else if (FsHelpers::hasXtcExtension(file.path)) {
+    Xtc xtc(file.path, "/.crosspoint");
     if (xtc.load()) {
       if (!xtc.getTitle().empty()) book.title = xtc.getTitle();
       book.author = xtc.getAuthor();
       const std::string thumb = xtc.getThumbBmpPath(140);
-      if (Storage.exists(thumb.c_str()) || xtc.generateThumbBmp(140)) {
+      if (Storage.exists(thumb.c_str())) {
         book.coverBmpPath = thumb;
       }
       book.started = readXtcProgress(xtc, book.progressPercent);
     }
   }
 
-  books.push_back(std::move(book));
+  return book;
 }
 
-void LibraryActivity::scanDirectory(const std::string& path, std::vector<std::string>& bookPaths) {
+bool LibraryActivity::scanDirectory(const std::string& path, std::vector<LibraryFileInfo>& bookFiles) {
   std::vector<std::string> directories;
   directories.reserve(DIRECTORY_STACK_RESERVE);
   directories.push_back(path);
   char fileName[FILE_NAME_BUFFER_SIZE] = {};
+  bool complete = true;
 
   while (!directories.empty()) {
     std::string directory = std::move(directories.back());
@@ -168,6 +179,7 @@ void LibraryActivity::scanDirectory(const std::string& path, std::vector<std::st
 
     HalFile root = Storage.open(directory.c_str());
     if (!root || !root.isDirectory()) {
+      complete = false;
       continue;
     }
     root.rewindDirectory();
@@ -175,6 +187,10 @@ void LibraryActivity::scanDirectory(const std::string& path, std::vector<std::st
     for (HalFile entry = root.openNextFile(); entry; entry = root.openNextFile()) {
       entry.getName(fileName, sizeof(fileName));
       const bool isDirectory = entry.isDirectory();
+      const uint64_t fileSize = isDirectory ? 0 : entry.fileSize64();
+      uint16_t modifiedDate = 0;
+      uint16_t modifiedTime = 0;
+      if (!isDirectory) entry.getModifyDateTime(modifiedDate, modifiedTime);
       entry.close();
 
       // Internal caches and host-created system folders are not books.
@@ -191,30 +207,63 @@ void LibraryActivity::scanDirectory(const std::string& path, std::vector<std::st
       if (isDirectory) {
         directories.push_back(std::move(fullPath));
       } else if (isBookFile(fullPath)) {
-        bookPaths.push_back(std::move(fullPath));
+        bookFiles.push_back({std::move(fullPath), fileSize, modifiedDate, modifiedTime});
       }
     }
     root.close();
   }
+  return complete;
 }
 
-void LibraryActivity::scanLibrary() {
-  books.clear();
+bool LibraryActivity::scanLibrary(const bool indexLoaded) {
   scannedBookCount = 0;
   totalBookCount = 0;
 
-  std::vector<std::string> bookPaths;
-  scanDirectory("/", bookPaths);
-  totalBookCount = bookPaths.size();
+  std::vector<LibraryFileInfo> bookFiles;
+  if (!scanDirectory("/", bookFiles)) {
+    LOG_ERR("LIB", "Library directory scan was incomplete; keeping the previous index");
+    return !indexLoaded;
+  }
 
-  // Now that the total is known, paint 0/N before the slower metadata and
-  // thumbnail generation begins.
-  requestUpdateAndWait();
+  std::vector<LibraryBook> cachedBooks = std::move(books);
+  std::unordered_map<std::string, size_t> cachedByPath;
+  cachedByPath.reserve(cachedBooks.size());
+  for (size_t i = 0; i < cachedBooks.size(); i++) {
+    cachedByPath.emplace(cachedBooks[i].path, i);
+  }
+
+  std::vector<LibraryBook> updatedBooks;
+  updatedBooks.reserve(bookFiles.size());
+  std::vector<LibraryFileInfo> changedFiles;
+  changedFiles.reserve(bookFiles.size());
+  for (const auto& file : bookFiles) {
+    const auto cached = cachedByPath.find(file.path);
+    if (cached != cachedByPath.end() && LibraryIndex::sourceMatches(cachedBooks[cached->second], file)) {
+      updatedBooks.push_back(std::move(cachedBooks[cached->second]));
+    } else {
+      changedFiles.push_back(file);
+    }
+  }
+
+  const bool removedBooks = updatedBooks.size() + changedFiles.size() != cachedBooks.size();
+  totalBookCount = changedFiles.size();
+
+  if (!changedFiles.empty()) {
+    // The cached list was already painted on entry. Only replace it with the
+    // progress screen when there is actual metadata work to perform.
+    scanning = true;
+    requestUpdateAndWait();
+  }
 
   const size_t updateInterval = std::max<size_t>(1, (totalBookCount + SCAN_PROGRESS_UPDATES - 1) /
                                                          SCAN_PROGRESS_UPDATES);
-  for (const auto& path : bookPaths) {
-    addBook(path);
+  for (const auto& file : changedFiles) {
+    if (cachedByPath.contains(file.path)) {
+      // The source changed in place, so its path-keyed reader cache and saved
+      // progress refer to the old bytes and must not be reused.
+      clearBookCache(file.path);
+    }
+    updatedBooks.push_back(loadBook(file));
     scannedBookCount++;
 
     // Full e-ink refreshes are deliberately limited to about ten per scan.
@@ -223,32 +272,88 @@ void LibraryActivity::scanLibrary() {
     }
   }
 
-  std::sort(books.begin(), books.end(), [](const LibraryBook& left, const LibraryBook& right) {
+  std::sort(updatedBooks.begin(), updatedBooks.end(), [](const LibraryBook& left, const LibraryBook& right) {
     if (left.title == right.title) {
       return FsHelpers::naturalLess(left.path, right.path);
     }
     return FsHelpers::naturalLess(left.title, right.title);
   });
+  books = std::move(updatedBooks);
+
+  const bool libraryChanged = !indexLoaded || !changedFiles.empty() || removedBooks;
+  if (libraryChanged) {
+    indexDirty = !LibraryIndex::save(books);
+  }
+  return libraryChanged;
 }
 
 void LibraryActivity::onEnter() {
   Activity::onEnter();
   selectorIndex = 0;
   lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
+  indexDirty = false;
 
-  // Show a complete e-ink frame before metadata and thumbnails are read from
-  // the SD card. The initial scan can take a while for uncached EPUB files.
-  scanning = true;
+  // A valid index paints the complete library immediately. The directory pass
+  // that follows only opens book metadata for new or changed source files.
+  const bool indexLoaded = LibraryIndex::load(books);
+  scanning = !indexLoaded;
   requestUpdateAndWait();
-  scanLibrary();
+  const bool libraryChanged = scanLibrary(indexLoaded);
   scanning = false;
-  requestUpdate();
+  if (libraryChanged) requestUpdate();
 }
 
 void LibraryActivity::onExit() {
   Activity::onExit();
+  if (indexDirty && !LibraryIndex::save(books)) {
+    LOG_ERR("LIB", "Failed to persist lazy cover updates");
+  }
   books.clear();
   filters.clear();
+}
+
+LibraryActivity::CoverAttemptResult LibraryActivity::ensureNextVisibleCover() {
+  const auto bookIndices = filteredBookIndices();
+  if (bookIndices.empty()) return CoverAttemptResult::None;
+
+  const size_t pageStart = selectorIndex / BOOKS_PER_PAGE * BOOKS_PER_PAGE;
+  const size_t pageEnd = std::min(bookIndices.size(), pageStart + BOOKS_PER_PAGE);
+  for (size_t index = pageStart; index < pageEnd; index++) {
+    LibraryBook& book = books[bookIndices[index]];
+    if (book.coverAttempted) continue;
+    book.coverAttempted = true;
+
+    if (!book.coverBmpPath.empty() && Storage.exists(book.coverBmpPath.c_str())) {
+      continue;
+    }
+    book.coverBmpPath.clear();
+
+    if (FsHelpers::hasEpubExtension(book.path)) {
+      Epub epub(book.path, "/.crosspoint");
+      if (epub.loadMetadata()) {
+        const std::string thumb = epub.getThumbBmpPath(140);
+        if (Storage.exists(thumb.c_str()) || epub.generateThumbBmp(140)) {
+          book.coverBmpPath = thumb;
+          indexDirty = true;
+          return CoverAttemptResult::Updated;
+        }
+      }
+    } else if (FsHelpers::hasXtcExtension(book.path)) {
+      Xtc xtc(book.path, "/.crosspoint");
+      if (xtc.load()) {
+        const std::string thumb = xtc.getThumbBmpPath(140);
+        if (Storage.exists(thumb.c_str()) || xtc.generateThumbBmp(140)) {
+          book.coverBmpPath = thumb;
+          indexDirty = true;
+          return CoverAttemptResult::Updated;
+        }
+      }
+    }
+    // Do at most one potentially expensive generation per main-loop pass so
+    // the first text-only frame remains visible and responsive.
+    return CoverAttemptResult::Attempted;
+  }
+  return CoverAttemptResult::None;
 }
 
 bool LibraryActivity::matchesFilters(const LibraryBook& book) const {
@@ -358,6 +463,10 @@ void LibraryActivity::loop() {
     selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), bookCount, BOOKS_PER_PAGE);
     requestUpdate();
   });
+
+  if (ensureNextVisibleCover() == CoverAttemptResult::Updated) {
+    requestUpdate();
+  }
 }
 
 void LibraryActivity::drawBookCover(const LibraryBook& book, const int x, const int y, const int width,

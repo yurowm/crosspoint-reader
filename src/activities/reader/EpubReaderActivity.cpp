@@ -28,6 +28,7 @@
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
+#include "LibraryIndex.h"
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
@@ -235,7 +236,29 @@ void EpubReaderActivity::onExit() {
   // pre-footnote position so the book reopens at the link origin, not the footnote.
   if (footnoteDepth > 0 && epub) {
     const SavedPosition& origin = savedPositions[0];
-    saveProgress(origin.spineIndex, origin.pageNumber, 0);
+    saveProgress(origin.spineIndex, origin.pageNumber, origin.pageCount);
+  }
+
+  if (epub) {
+    int progressSpine = currentSpineIndex;
+    int progressPage = section ? section->currentPage : nextPageNumber;
+    int progressPageCount = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+    if (footnoteDepth > 0) {
+      const SavedPosition& origin = savedPositions[0];
+      progressSpine = origin.spineIndex;
+      progressPage = origin.pageNumber;
+      progressPageCount = origin.pageCount;
+    }
+    int percent = 100;
+    if (progressSpine < epub->getSpineItemsCount()) {
+      progressSpine = std::max(0, progressSpine);
+      const float chapterProgress = progressPageCount > 0
+                                        ? static_cast<float>(std::clamp(progressPage, 0, progressPageCount)) /
+                                              static_cast<float>(progressPageCount)
+                                        : 0.0f;
+      percent = static_cast<int>(epub->calculateProgress(progressSpine, chapterProgress) * 100.0f + 0.5f);
+    }
+    LibraryIndex::updateProgress(epub->getPath(), static_cast<uint8_t>(std::clamp(percent, 0, 100)));
   }
 
   section.reset();
@@ -1891,7 +1914,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 
   // Push current position onto saved stack
   if (savePosition && section && footnoteDepth < MAX_FOOTNOTE_DEPTH) {
-    savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage};
+    savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage, section->estimatedTotalPages()};
     footnoteDepth++;
     LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, section->currentPage);
   }

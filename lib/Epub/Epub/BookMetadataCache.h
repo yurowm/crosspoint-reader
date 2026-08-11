@@ -67,6 +67,12 @@ class BookMetadataCache {
   // wrapper serves whichever pass is active (spine, then toc).
   std::unique_ptr<serialization::BufferedFileWriter> passOut;
 
+  // Cumulative spine sizes, cached in RAM during a full load() so progress/percent
+  // lookups are O(1) instead of 2 seeks + a heap-allocating SpineEntry read per
+  // access (4 bytes per spine item; <1KB for typical books). Catalog-only loads
+  // deliberately leave this empty.
+  std::vector<uint32_t> cumulativeSizes;
+
   // Index for fast href→spineIndex lookup (used only for large EPUBs)
   struct SpineHrefIndexEntry {
     uint64_t hrefHash;  // FNV-1a 64-bit hash
@@ -115,7 +121,8 @@ class BookMetadataCache {
   bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata);
 
   // Reading phase (read mode)
-  bool load();
+  bool load(bool loadCumulativeSizes = true);
+  void setCoreMetadata(BookMetadata metadata);
   SpineEntry getSpineEntry(int index);
   TocEntry getTocEntry(int index);
   int getSpineCount() const { return spineCount; }

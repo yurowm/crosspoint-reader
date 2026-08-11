@@ -1,0 +1,47 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+struct LibraryBook {
+  std::string path;
+  std::string title;
+  std::string author;
+  std::vector<std::string> authors;
+  std::string series;
+  std::string seriesIndex;
+  std::vector<std::string> tags;
+  std::string coverBmpPath;
+  uint64_t fileSize = 0;
+  uint16_t modifiedDate = 0;
+  uint16_t modifiedTime = 0;
+  uint8_t progressPercent = 0;
+  bool started = false;
+
+  // Runtime-only guard for lazy cover generation. Failed or unavailable covers
+  // are attempted at most once per LibraryActivity session.
+  bool coverAttempted = false;
+};
+
+struct LibraryFileInfo {
+  std::string path;
+  uint64_t fileSize = 0;
+  uint16_t modifiedDate = 0;
+  uint16_t modifiedTime = 0;
+};
+
+class LibraryIndex {
+ public:
+  static constexpr const char* FILE_PATH = "/.crosspoint/library.idx";
+
+  static bool load(std::vector<LibraryBook>& books);
+  static bool save(const std::vector<LibraryBook>& books);
+
+  // Best-effort helpers for mutations that happen outside LibraryActivity.
+  // Missing index files and paths are successful no-ops.
+  static bool updateProgress(const std::string& path, uint8_t progressPercent);
+  static bool invalidate(const std::string& path);
+
+  static bool sourceMatches(const LibraryBook& book, const LibraryFileInfo& file);
+};

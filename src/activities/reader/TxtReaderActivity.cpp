@@ -8,8 +8,11 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "LibraryIndex.h"
 #include "MappedInputManager.h"
 #include "ProgressFile.h"
 #include "ReaderUtils.h"
@@ -56,6 +59,10 @@ void TxtReaderActivity::onExit() {
   currentPageLines.clear();
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+  if (txt && totalPages > 0) {
+    const int percent = static_cast<int>((std::clamp(currentPage, 0, totalPages - 1) + 1) * 100.0f / totalPages + 0.5f);
+    LibraryIndex::updateProgress(txt->getPath(), static_cast<uint8_t>(std::clamp(percent, 0, 100)));
+  }
   txt.reset();
 }
 

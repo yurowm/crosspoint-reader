@@ -505,6 +505,23 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   return true;
 }
 
+bool Epub::loadMetadata() {
+  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  if (bookMetadataCache->load(/*loadCumulativeSizes=*/false)) {
+    return true;
+  }
+
+  // ContentOpfParser temporarily spills the manifest into the per-book cache
+  // directory, even when it is not building spine entries.
+  setupCacheDir();
+  BookMetadataCache::BookMetadata metadata;
+  if (!parseContentOpf(metadata, /*writeSpineEntries=*/false)) {
+    return false;
+  }
+  bookMetadataCache->setCoreMetadata(std::move(metadata));
+  return true;
+}
+
 bool Epub::clearCache() const {
   if (!Storage.exists(cachePath.c_str())) {
     LOG_DBG("EPB", "Cache does not exist, no action needed");
