@@ -101,7 +101,49 @@ struct ThemeMetrics {
   int textFieldLineEndOffset;
 };
 
-enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
+enum UIIcon {
+  None = 0,
+  Folder,
+  Text,
+  Image,
+  Book,
+  File,
+  Recent,
+  Settings,
+  Transfer,
+  Library,
+  Wifi,
+  Hotspot,
+  Bookmark,
+  ContinueReading,
+  ChevronUp,
+  ChevronDown,
+  Check,
+  House,
+  Filters,
+  NavigateBack,
+  SwitchTabs,
+  Plus,
+  Minus,
+  Trash,
+  Refresh,
+  Cancel,
+  Exit,
+  Search,
+  ChevronLeft,
+  ChevronRight
+};
+
+struct ButtonHint {
+  const char* label = "";
+  UIIcon icon = None;
+  UIIcon holdIcon = None;
+};
+
+const uint8_t* getUIIconBitmap(UIIcon icon, int size);
+void drawUIIcon(const GfxRenderer& renderer, UIIcon icon, int x, int y, int size, bool state = true);
+ButtonHint buttonHintFromLabel(const char* label, uint8_t hardwareButton);
+ButtonHint sideButtonHintFromLabel(const char* label);
 
 // Default theme implementation (Classic Theme)
 // Additional themes can inherit from this and override methods as needed
@@ -186,6 +228,15 @@ class BaseTheme {
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
+  virtual void drawIconButtonHints(GfxRenderer& renderer, const ButtonHint& btn1, const ButtonHint& btn2,
+                                   const ButtonHint& btn3, const ButtonHint& btn4) const;
+  // Shared by every theme's drawButtonHints(): centres a hint label in its box,
+  // wrapping to two lines rather than overflowing when it's too wide to fit.
+  static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
+                            int boxHeight, int singleLineYOffset);
+  static int getButtonHintContentWidth(const GfxRenderer& renderer, const ButtonHint& hint, int iconSize, int fontId);
+  static void drawButtonHintContent(GfxRenderer& renderer, const ButtonHint& hint, int centerX, int centerY,
+                                    int iconSize, int fontId, bool state = true);
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   virtual int getListRowStep(bool hasSubtitle) const;
   virtual int getListPageItems(int contentHeight, bool hasSubtitle) const;

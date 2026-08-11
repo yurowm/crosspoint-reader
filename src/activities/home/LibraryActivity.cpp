@@ -14,10 +14,10 @@
 #include <memory>
 #include <unordered_map>
 
+#include "LibraryFiltersActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "LibraryFiltersActivity.h"
 #include "util/BookCacheUtils.h"
 
 namespace {
@@ -55,9 +55,23 @@ bool matchesSelection(const std::vector<std::string>& values, const std::set<std
   if (selected.empty()) {
     return true;
   }
-  return std::any_of(values.begin(), values.end(), [&selected](const std::string& value) {
-    return selected.contains(value);
-  });
+  return std::any_of(values.begin(), values.end(),
+                     [&selected](const std::string& value) { return selected.contains(value); });
+}
+
+ButtonHint libraryButtonHint(const MappedInputManager::NavigationAction action) {
+  switch (action) {
+    case MappedInputManager::NavigationAction::Back:
+      return {.icon = House, .holdIcon = Filters};
+    case MappedInputManager::NavigationAction::Confirm:
+      return {.icon = Check};
+    case MappedInputManager::NavigationAction::Previous:
+      return {.icon = ChevronUp};
+    case MappedInputManager::NavigationAction::Next:
+      return {.icon = ChevronDown};
+    default:
+      return {};
+  }
 }
 }  // namespace
 
@@ -255,8 +269,8 @@ bool LibraryActivity::scanLibrary(const bool indexLoaded) {
     requestUpdateAndWait();
   }
 
-  const size_t updateInterval = std::max<size_t>(1, (totalBookCount + SCAN_PROGRESS_UPDATES - 1) /
-                                                         SCAN_PROGRESS_UPDATES);
+  const size_t updateInterval =
+      std::max<size_t>(1, (totalBookCount + SCAN_PROGRESS_UPDATES - 1) / SCAN_PROGRESS_UPDATES);
   for (const auto& file : changedFiles) {
     if (cachedByPath.contains(file.path)) {
       // The source changed in place, so its path-keyed reader cache and saved
@@ -379,12 +393,12 @@ std::vector<size_t> LibraryActivity::filteredBookIndices() const {
 
 void LibraryActivity::openFilters() {
   lockLongPressBack = true;
-  startActivityForResult(
-      std::make_unique<LibraryFiltersActivity>(renderer, mappedInput, books, filters), [this](const ActivityResult&) {
-        selectorIndex = 0;
-        lockLongPressBack = false;
-        requestUpdate();
-      });
+  startActivityForResult(std::make_unique<LibraryFiltersActivity>(renderer, mappedInput, books, filters),
+                         [this](const ActivityResult&) {
+                           selectorIndex = 0;
+                           lockLongPressBack = false;
+                           requestUpdate();
+                         });
 }
 
 void LibraryActivity::loop() {
@@ -412,14 +426,15 @@ void LibraryActivity::loop() {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
   const int rowHeight = std::max(1, (contentHeight - ROW_GAP * (BOOKS_PER_PAGE - 1)) / BOOKS_PER_PAGE);
   const int pageStart = static_cast<int>(selectorIndex / BOOKS_PER_PAGE) * BOOKS_PER_PAGE;
   const int visibleRows = std::min(BOOKS_PER_PAGE, bookCount - pageStart);
 
   int row = -1;
-  const auto touch = mappedInput.rowTouch(row, contentTop, rowHeight + ROW_GAP, visibleRows, 0, renderer.getScreenWidth(),
-                                          rowHeight);
+  const auto touch =
+      mappedInput.rowTouch(row, contentTop, rowHeight + ROW_GAP, visibleRows, 0, renderer.getScreenWidth(), rowHeight);
   if (touch != MappedInputManager::RowTouch::None) {
     selectorIndex = static_cast<size_t>(pageStart + row);
     if (touch == MappedInputManager::RowTouch::Tap) {
@@ -477,7 +492,7 @@ void LibraryActivity::drawBookCover(const LibraryBook& book, const int x, const 
       Bitmap bitmap(coverFile);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
         const float scale = std::min(1.0f, std::min(static_cast<float>(width) / bitmap.getWidth(),
-                                                     static_cast<float>(height) / bitmap.getHeight()));
+                                                    static_cast<float>(height) / bitmap.getHeight()));
         const int drawWidth = std::max(1, static_cast<int>(bitmap.getWidth() * scale));
         const int drawHeight = std::max(1, static_cast<int>(bitmap.getHeight() * scale));
         renderer.drawBitmap(bitmap, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
@@ -506,11 +521,12 @@ void LibraryActivity::render(RenderLock&&) {
       UITheme::drawCenteredText(renderer, contentRect, UI_10_FONT_ID,
                                 scanningTextY + renderer.getLineHeight(UI_12_FONT_ID) + 13, countText.c_str());
       const int progressWidth = std::min(pageWidth - 40, 220);
-      GUI.drawProgressBar(renderer,
-                          Rect{(pageWidth - progressWidth) / 2, scanningTextY + renderer.getLineHeight(UI_12_FONT_ID) +
-                                                                       renderer.getLineHeight(UI_10_FONT_ID) + 28,
-                               progressWidth, 16},
-                          scannedBookCount, totalBookCount);
+      GUI.drawProgressBar(
+          renderer,
+          Rect{(pageWidth - progressWidth) / 2,
+               scanningTextY + renderer.getLineHeight(UI_12_FONT_ID) + renderer.getLineHeight(UI_10_FONT_ID) + 28,
+               progressWidth, 16},
+          scannedBookCount, totalBookCount);
     }
   } else {
     const auto bookIndices = filteredBookIndices();
@@ -581,7 +597,8 @@ void LibraryActivity::render(RenderLock&&) {
     }
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  const auto actions = mappedInput.mapNavigationActions();
+  GUI.drawIconButtonHints(renderer, libraryButtonHint(actions.btn1), libraryButtonHint(actions.btn2),
+                          libraryButtonHint(actions.btn3), libraryButtonHint(actions.btn4));
   renderer.displayBuffer();
 }

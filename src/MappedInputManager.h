@@ -32,6 +32,15 @@ class MappedInputManager {
     const char* btn4;
   };
 
+  enum class NavigationAction : uint8_t { None, Back, Confirm, Previous, Next };
+
+  struct NavigationActions {
+    NavigationAction btn1;
+    NavigationAction btn2;
+    NavigationAction btn3;
+    NavigationAction btn4;
+  };
+
   MappedInputManager(HalGPIO& gpio, const GfxRenderer& renderer) : gpio(gpio), renderer(renderer) {}
 
   void update() const { gpio.update(); }
@@ -68,6 +77,7 @@ class MappedInputManager {
   unsigned long getHeldTime() const;
   const GfxRenderer& getRenderer() const { return renderer; }
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;
+  NavigationActions mapNavigationActions() const;
   // Maps four screen-direction labels onto the two physical front-button roles
   // using the same live-orientation transform as ScreenLeft/Right/Up/Down.
   Labels mapDirectionalLabels(const char* back, const char* confirm, const char* left, const char* right,
@@ -92,6 +102,7 @@ class MappedInputManager {
 
   Button mapScreenDirection(Button button) const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
+  NavigationActions mapFrontNavigationActions(NavigationAction left, NavigationAction right) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
   bool wasBackGesture() const;
   // Fetch the pending swipe (if any) and map both endpoints to logical screen coords

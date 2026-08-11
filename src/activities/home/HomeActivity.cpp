@@ -77,6 +77,19 @@ bool readXtcProgress(const Xtc& xtc, uint8_t& progressPercent) {
   progressPercent = xtc.calculateProgress(std::min(readLe32(data.data()), xtc.getPageCount() - 1));
   return true;
 }
+
+ButtonHint homeButtonHint(const MappedInputManager::NavigationAction action) {
+  switch (action) {
+    case MappedInputManager::NavigationAction::Confirm:
+      return {.icon = Check};
+    case MappedInputManager::NavigationAction::Previous:
+      return {.icon = ChevronUp};
+    case MappedInputManager::NavigationAction::Next:
+      return {.icon = ChevronDown};
+    default:
+      return {};
+  }
+}
 }  // namespace
 
 int HomeActivity::getMenuItemCount() const {
@@ -207,8 +220,8 @@ void HomeActivity::onEnter() {
   loadCurrentBookDetails();
 
   const int continueOffset = recentBooks.empty() ? 0 : 1;
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0
-                                                        : continueOffset + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  selectorIndex =
+      initialMenuItem == HomeMenuItem::NONE ? 0 : continueOffset + menuItemToIndex(initialMenuItem, hasOpdsServers);
 
   // Trigger first update
   requestUpdate();
@@ -310,21 +323,10 @@ void HomeActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) backPressSeen = true;
-
-  // Back is otherwise unused on the home menu: open the most recently read
-  // book directly (recentBooks is most-recent-first and already pruned of
-  // files missing from the SD card). backPressSeen guards against the stale
-  // release of the Back press that closed the previous activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen && !recentBooks.empty()) {
-    onSelectBook(recentBooks[0].path);
-    return;
-  }
-
   const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
   int menuRow = -1;
-  const auto menuTouch = mappedInput.rowTouch(menuRow, menuTop, metrics.menuRowHeight + metrics.menuSpacing,
-                                              menuCount, 0, INT32_MAX, metrics.menuRowHeight);
+  const auto menuTouch = mappedInput.rowTouch(menuRow, menuTop, metrics.menuRowHeight + metrics.menuSpacing, menuCount,
+                                              0, INT32_MAX, metrics.menuRowHeight);
   if (menuTouch != MappedInputManager::RowTouch::None) {
     const int touchedIndex = menuRow;
     if (menuTouch == MappedInputManager::RowTouch::Down) {
@@ -378,7 +380,7 @@ void HomeActivity::render(RenderLock&&) {
 
   if (!recentBooks.empty()) {
     menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
-    menuIcons.insert(menuIcons.begin(), Book);
+    menuIcons.insert(menuIcons.begin(), ContinueReading);
   }
 
   GUI.drawButtonMenu(
@@ -390,9 +392,9 @@ void HomeActivity::render(RenderLock&&) {
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
-  const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT), tr(STR_DIR_UP),
-                                            tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  const auto actions = mappedInput.mapNavigationActions();
+  GUI.drawIconButtonHints(renderer, homeButtonHint(actions.btn1), homeButtonHint(actions.btn2),
+                          homeButtonHint(actions.btn3), homeButtonHint(actions.btn4));
 
   renderer.displayBuffer();
 

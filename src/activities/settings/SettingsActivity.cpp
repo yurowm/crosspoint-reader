@@ -525,16 +525,24 @@ void SettingsActivity::render(RenderLock&&) {
       },
       true);
 
-  // Draw help text
-  const auto confirmLabel =
-      (selectedSettingIndex == 0)
-          ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
-          : (selectedSettingIndex > 0 && (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP
-                 ? tr(STR_SELECT)
-                 : tr(STR_TOGGLE));
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  const auto buttonHint = [this](const MappedInputManager::NavigationAction action) {
+    switch (action) {
+      case MappedInputManager::NavigationAction::Back:
+        return ButtonHint{.icon = NavigateBack};
+      case MappedInputManager::NavigationAction::Confirm:
+        return ButtonHint{.icon = selectedSettingIndex == 0 ? SwitchTabs : Check};
+      case MappedInputManager::NavigationAction::Previous:
+        return ButtonHint{.icon = ChevronUp};
+      case MappedInputManager::NavigationAction::Next:
+        return ButtonHint{.icon = ChevronDown};
+      case MappedInputManager::NavigationAction::None:
+      default:
+        return ButtonHint{};
+    }
+  };
+  const auto actions = mappedInput.mapNavigationActions();
+  GUI.drawIconButtonHints(renderer, buttonHint(actions.btn1), buttonHint(actions.btn2), buttonHint(actions.btn3),
+                          buttonHint(actions.btn4));
 
   // Always use standard refresh for settings screen
   renderer.displayBuffer();

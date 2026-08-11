@@ -9,12 +9,23 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <string>
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
+#include "components/icons/book.h"
+#include "components/icons/book24.h"
 #include "components/icons/bookmark.h"
+#include "components/icons/file24.h"
+#include "components/icons/folder.h"
+#include "components/icons/folder24.h"
+#include "components/icons/hotspot.h"
+#include "components/icons/image24.h"
+#include "components/icons/text24.h"
+#include "components/icons/ui_icons_generated.h"
+#include "components/icons/wifi.h"
 #include "fontIds.h"
 
 // Internal constants
@@ -40,6 +51,280 @@ void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int 
 }
 
 }  // namespace
+
+const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
+  if (size == 20) {
+    switch (icon) {
+      case ContinueReading:
+        return icon_continue_reading_20.bits;
+      case Library:
+        return icon_library_20.bits;
+      case Recent:
+        return icon_recent_20.bits;
+      case Transfer:
+        return icon_transfer_20.bits;
+      case Settings:
+        return icon_settings_20.bits;
+      case ChevronUp:
+        return icon_chevron_up_20.bits;
+      case ChevronDown:
+        return icon_chevron_down_20.bits;
+      case Check:
+        return icon_check_20.bits;
+      case House:
+        return icon_house_20.bits;
+      case Filters:
+        return icon_filters_20.bits;
+      case NavigateBack:
+        return icon_navigate_back_20.bits;
+      case SwitchTabs:
+        return icon_switch_tabs_20.bits;
+      case Plus:
+        return icon_plus_20.bits;
+      case Minus:
+        return icon_minus_20.bits;
+      case Trash:
+        return icon_trash_20.bits;
+      case Refresh:
+        return icon_refresh_20.bits;
+      case Cancel:
+        return icon_cancel_20.bits;
+      case Exit:
+        return icon_exit_20.bits;
+      case Search:
+        return icon_search_20.bits;
+      case ChevronLeft:
+        return icon_chevron_left_20.bits;
+      case ChevronRight:
+        return icon_chevron_right_20.bits;
+      default:
+        return nullptr;
+    }
+  }
+
+  if (size == 24) {
+    switch (icon) {
+      case Folder:
+        return Folder24Icon;
+      case Text:
+        return Text24Icon;
+      case Image:
+        return Image24Icon;
+      case Book:
+        return Book24Icon;
+      case File:
+        return File24Icon;
+      case ContinueReading:
+        return icon_continue_reading_24.bits;
+      case Library:
+        return icon_library_24.bits;
+      case Recent:
+        return icon_recent_24.bits;
+      case Transfer:
+        return icon_transfer_24.bits;
+      case Settings:
+        return icon_settings_24.bits;
+      case ChevronUp:
+        return icon_chevron_up_24.bits;
+      case ChevronDown:
+        return icon_chevron_down_24.bits;
+      case Check:
+        return icon_check_24.bits;
+      case House:
+        return icon_house_24.bits;
+      case Filters:
+        return icon_filters_24.bits;
+      case NavigateBack:
+        return icon_navigate_back_24.bits;
+      case SwitchTabs:
+        return icon_switch_tabs_24.bits;
+      case Plus:
+        return icon_plus_24.bits;
+      case Minus:
+        return icon_minus_24.bits;
+      case Trash:
+        return icon_trash_24.bits;
+      case Refresh:
+        return icon_refresh_24.bits;
+      case Cancel:
+        return icon_cancel_24.bits;
+      case Exit:
+        return icon_exit_24.bits;
+      case Search:
+        return icon_search_24.bits;
+      case ChevronLeft:
+        return icon_chevron_left_24.bits;
+      case ChevronRight:
+        return icon_chevron_right_24.bits;
+      default:
+        return nullptr;
+    }
+  }
+
+  if (size == 32) {
+    switch (icon) {
+      case Folder:
+        return FolderIcon;
+      case Book:
+        return BookIcon;
+      case Wifi:
+        return WifiIcon;
+      case Hotspot:
+        return HotspotIcon;
+      case Bookmark:
+        return BookmarkIcon;
+      case ContinueReading:
+        return icon_continue_reading_32.bits;
+      case Library:
+        return icon_library_32.bits;
+      case Recent:
+        return icon_recent_32.bits;
+      case Transfer:
+        return icon_transfer_32.bits;
+      case Settings:
+        return icon_settings_32.bits;
+      case ChevronUp:
+        return icon_chevron_up_32.bits;
+      case ChevronDown:
+        return icon_chevron_down_32.bits;
+      case Check:
+        return icon_check_32.bits;
+      case House:
+        return icon_house_32.bits;
+      case Filters:
+        return icon_filters_32.bits;
+      case NavigateBack:
+        return icon_navigate_back_32.bits;
+      case SwitchTabs:
+        return icon_switch_tabs_32.bits;
+      case Plus:
+        return icon_plus_32.bits;
+      case Minus:
+        return icon_minus_32.bits;
+      case Trash:
+        return icon_trash_32.bits;
+      case Refresh:
+        return icon_refresh_32.bits;
+      case Cancel:
+        return icon_cancel_32.bits;
+      case Exit:
+        return icon_exit_32.bits;
+      case Search:
+        return icon_search_32.bits;
+      case ChevronLeft:
+        return icon_chevron_left_32.bits;
+      case ChevronRight:
+        return icon_chevron_right_32.bits;
+      default:
+        return nullptr;
+    }
+  }
+
+  return nullptr;
+}
+
+void drawUIIcon(const GfxRenderer& renderer, const UIIcon icon, const int x, const int y, const int size,
+                const bool state) {
+  const uint8_t* bitmap = getUIIconBitmap(icon, size);
+  if (bitmap == nullptr) {
+    return;
+  }
+
+  switch (icon) {
+    case Recent:
+    case Settings:
+    case Transfer:
+    case Library:
+    case ContinueReading:
+    case ChevronUp:
+    case ChevronDown:
+    case Check:
+    case House:
+    case Filters:
+    case NavigateBack:
+    case SwitchTabs:
+    case Plus:
+    case Minus:
+    case Trash:
+    case Refresh:
+    case Cancel:
+    case Exit:
+    case Search:
+    case ChevronLeft:
+    case ChevronRight:
+      renderer.drawNativeIcon(bitmap, x, y, size, state);
+      break;
+    default:
+      renderer.drawIcon(bitmap, x, y, size, state);
+      break;
+  }
+}
+
+ButtonHint buttonHintFromLabel(const char* label, const uint8_t hardwareButton) {
+  if (label == nullptr || label[0] == '\0') {
+    return {};
+  }
+  // Specific commands override the generic confirm glyph even when they happen to use
+  // the configured Confirm button on a particular screen.
+  if (std::strcmp(label, "+") == 0) {
+    return {.icon = Plus};
+  }
+  if (std::strcmp(label, "-") == 0) {
+    return {.icon = Minus};
+  }
+  if (std::strcmp(label, tr(STR_FORGET_BUTTON)) == 0) {
+    return {.icon = Trash};
+  }
+  if (std::strcmp(label, tr(STR_RETRY)) == 0) {
+    return {.icon = Refresh};
+  }
+  if (std::strcmp(label, tr(STR_CANCEL)) == 0) {
+    return {.icon = Cancel};
+  }
+  if (std::strcmp(label, tr(STR_EXIT)) == 0) {
+    return {.icon = Exit};
+  }
+  if (std::strcmp(label, tr(STR_HOME)) == 0) {
+    return {.icon = House};
+  }
+  if (std::strcmp(label, tr(STR_SEARCH)) == 0) {
+    return {.icon = Search};
+  }
+  if (std::strcmp(label, tr(STR_DIR_LEFT)) == 0 || std::strcmp(label, "<") == 0) {
+    return {.icon = ChevronLeft};
+  }
+  if (std::strcmp(label, tr(STR_DIR_RIGHT)) == 0 || std::strcmp(label, ">") == 0) {
+    return {.icon = ChevronRight};
+  }
+  // The confirm label is contextual (Select, Open, Toggle, Retry, a settings category, ...),
+  // so identify it by the configured physical button instead of translated label text.
+  if (hardwareButton == SETTINGS.frontButtonConfirm) {
+    return {.icon = Check};
+  }
+  if (std::strcmp(label, tr(STR_DIR_UP)) == 0) {
+    return {.icon = ChevronUp};
+  }
+  if (std::strcmp(label, tr(STR_DIR_DOWN)) == 0) {
+    return {.icon = ChevronDown};
+  }
+  if (std::strcmp(label, tr(STR_BACK)) == 0) {
+    return {.icon = NavigateBack};
+  }
+  return {.label = label};
+}
+
+ButtonHint sideButtonHintFromLabel(const char* label) {
+  if (label == nullptr || label[0] == '\0') {
+    return {};
+  }
+  if (std::strcmp(label, ">") == 0) {
+    return {.icon = ChevronRight};
+  }
+  if (std::strcmp(label, "<") == 0) {
+    return {.icon = ChevronLeft};
+  }
+  return {.label = label};
+}
 
 void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
   // Top line
@@ -150,6 +435,85 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
 }
 
+// Centre a button-hint label inside its box. A label that fits is drawn on the
+// single baseline it always was; one too wide used to overflow the button border
+// and run into the neighbouring hint, and now wraps to at most two centred lines
+// (wrappedText() ellipsises anything that still doesn't fit). Shared so every
+// theme's drawButtonHints() gets the same behaviour.
+void BaseTheme::drawHintLabel(GfxRenderer& renderer, const int fontId, const char* label, const int x,
+                              const int boxWidth, const int boxTop, const int boxHeight, const int singleLineYOffset) {
+  constexpr int textPadding = 4;  // keeps a wrapped label off the button's border
+  const int maxTextWidth = boxWidth - (textPadding * 2);
+
+  const int textWidth = renderer.getTextWidth(fontId, label);
+  if (textWidth <= maxTextWidth) {
+    renderer.drawText(fontId, x + (boxWidth - 1 - textWidth) / 2, boxTop + singleLineYOffset, label);
+    return;
+  }
+
+  // Spaced by the glyph height, not getLineHeight() — that returns the font's
+  // full advanceY (leading included), which stacks two lines taller than the
+  // button and clips the second one.
+  constexpr int lineGap = 2;
+  const int step = renderer.getTextHeight(fontId) + lineGap;
+  const auto lines = renderer.wrappedText(fontId, label, maxTextWidth, 2);
+  const int block = static_cast<int>(lines.size()) * step - lineGap;
+  int lineY = boxTop + std::max(1, (boxHeight - block) / 2);
+  for (const auto& line : lines) {
+    const int lineWidth = renderer.getTextWidth(fontId, line.c_str());
+    renderer.drawText(fontId, x + (boxWidth - 1 - lineWidth) / 2, lineY, line.c_str());
+    lineY += step;
+  }
+}
+
+int BaseTheme::getButtonHintContentWidth(const GfxRenderer& renderer, const ButtonHint& hint, const int iconSize,
+                                         const int fontId) {
+  constexpr int contentGap = 5;
+  int width = 0;
+
+  if (hint.icon != None && getUIIconBitmap(hint.icon, iconSize) != nullptr) {
+    width += iconSize;
+  }
+  if (hint.holdIcon != None && getUIIconBitmap(hint.holdIcon, iconSize) != nullptr) {
+    const int separatorWidth = renderer.getTextWidth(fontId, "/");
+    width += (width > 0 ? contentGap : 0) + separatorWidth + contentGap + iconSize;
+  }
+  if (hint.label != nullptr && hint.label[0] != '\0') {
+    width += (width > 0 ? contentGap : 0) + renderer.getTextWidth(fontId, hint.label);
+  }
+  return width;
+}
+
+void BaseTheme::drawButtonHintContent(GfxRenderer& renderer, const ButtonHint& hint, const int centerX,
+                                      const int centerY, const int iconSize, const int fontId, const bool state) {
+  constexpr int contentGap = 5;
+  int x = centerX - getButtonHintContentWidth(renderer, hint, iconSize, fontId) / 2;
+  const int iconY = centerY - iconSize / 2;
+  const int textY = centerY - renderer.getLineHeight(fontId) / 2;
+
+  if (const uint8_t* icon = getUIIconBitmap(hint.icon, iconSize); icon != nullptr) {
+    drawUIIcon(renderer, hint.icon, x, iconY, iconSize, state);
+    x += iconSize;
+  }
+
+  if (const uint8_t* holdIcon = getUIIconBitmap(hint.holdIcon, iconSize); holdIcon != nullptr) {
+    if (x != centerX - getButtonHintContentWidth(renderer, hint, iconSize, fontId) / 2) {
+      x += contentGap;
+    }
+    renderer.drawText(fontId, x, textY, "/", state);
+    x += renderer.getTextWidth(fontId, "/") + contentGap;
+    drawUIIcon(renderer, hint.holdIcon, x, iconY, iconSize, state);
+    x += iconSize;
+  }
+
+  if (hint.label != nullptr && hint.label[0] != '\0') {
+    if (x != centerX - getButtonHintContentWidth(renderer, hint, iconSize, fontId) / 2) {
+      x += contentGap;
+    }
+    renderer.drawText(fontId, x, textY, hint.label, state);
+  }
+}
+
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
   if (gpio.hasTouch()) {
@@ -164,25 +528,65 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   constexpr int buttonHeight = BaseMetrics::values.buttonHintsHeight;
   constexpr int buttonY = BaseMetrics::values.buttonHintsHeight;  // Distance from bottom
   constexpr int textYOffset = 7;                                  // Distance from top of button to text baseline
+  constexpr int iconSize = 24;
   // X3 has wider screen in portrait (528 vs 480), use more spacing
   constexpr int x4ButtonPositions[] = {25, 130, 245, 350};
   constexpr int x3ButtonPositions[] = {38, 154, 268, 384};
   const int* buttonPositions = gpio.deviceIsX3() ? x3ButtonPositions : x4ButtonPositions;
   const char* labels[] = {btn1, btn2, btn3, btn4};
+  constexpr uint8_t hardwareButtons[] = {HalGPIO::BTN_BACK, HalGPIO::BTN_CONFIRM, HalGPIO::BTN_LEFT,
+                                         HalGPIO::BTN_RIGHT};
 
   for (int i = 0; i < 4; i++) {
-    // Only draw if the label is non-empty
-    if (labels[i] != nullptr && labels[i][0] != '\0') {
+    const ButtonHint hint = buttonHintFromLabel(labels[i], hardwareButtons[i]);
+    if (getButtonHintContentWidth(renderer, hint, iconSize, UI_10_FONT_ID) > 0) {
       const int x = buttonPositions[i];
       renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
       renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
-      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+      if (hint.icon != None) {
+        drawButtonHintContent(renderer, hint, x + buttonWidth / 2, pageHeight - buttonY + buttonHeight / 2, iconSize,
+                              UI_10_FONT_ID);
+      } else {
+        drawHintLabel(renderer, UI_10_FONT_ID, labels[i], x, buttonWidth, pageHeight - buttonY, buttonHeight,
+                      textYOffset);
+      }
     }
   }
 
   renderer.setOrientation(orig_orientation);
+}
+
+void BaseTheme::drawIconButtonHints(GfxRenderer& renderer, const ButtonHint& btn1, const ButtonHint& btn2,
+                                    const ButtonHint& btn3, const ButtonHint& btn4) const {
+  if (gpio.hasTouch()) {
+    return;
+  }
+
+  const GfxRenderer::Orientation originalOrientation = renderer.getOrientation();
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+
+  const int pageHeight = renderer.getScreenHeight();
+  constexpr int buttonWidth = 106;
+  constexpr int buttonHeight = BaseMetrics::values.buttonHintsHeight;
+  constexpr int buttonY = BaseMetrics::values.buttonHintsHeight;
+  constexpr int iconSize = 24;
+  constexpr int x4ButtonPositions[] = {25, 130, 245, 350};
+  constexpr int x3ButtonPositions[] = {38, 154, 268, 384};
+  const int* buttonPositions = gpio.deviceIsX3() ? x3ButtonPositions : x4ButtonPositions;
+  const ButtonHint hints[] = {btn1, btn2, btn3, btn4};
+
+  for (int i = 0; i < 4; i++) {
+    if (getButtonHintContentWidth(renderer, hints[i], iconSize, UI_10_FONT_ID) == 0) {
+      continue;
+    }
+    const int x = buttonPositions[i];
+    const int y = pageHeight - buttonY;
+    renderer.fillRect(x, y, buttonWidth, buttonHeight, false);
+    renderer.drawRect(x, y, buttonWidth, buttonHeight);
+    drawButtonHintContent(renderer, hints[i], x + buttonWidth / 2, y + buttonHeight / 2, iconSize, UI_10_FONT_ID);
+  }
+
+  renderer.setOrientation(originalOrientation);
 }
 
 void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
@@ -194,47 +598,54 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   constexpr int buttonWidth = BaseMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
   constexpr int buttonHeight = 80;                                       // Height on screen (width when rotated)
   constexpr int buttonMargin = 4;
+  constexpr int iconSize = 24;
+  const ButtonHint hints[] = {sideButtonHintFromLabel(topBtn), sideButtonHintFromLabel(bottomBtn)};
+  const auto hasHint = [](const ButtonHint& hint) {
+    return hint.icon != None || (hint.label != nullptr && hint.label[0] != '\0');
+  };
+  const auto drawHint = [&](const ButtonHint& hint, const int x, const int y) {
+    if (hint.icon != None) {
+      drawUIIcon(renderer, hint.icon, x + (buttonWidth - iconSize) / 2, y + (buttonHeight - iconSize) / 2, iconSize);
+      return;
+    }
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, hint.label);
+    const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
+    const int textX = x + (buttonWidth - textHeight) / 2;
+    const int textY = y + (buttonHeight + textWidth) / 2;
+    renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, hint.label);
+  };
 
   if (gpio.deviceIsX3()) {
     // X3 layout: Up on left side, Down on right side, positioned higher
     constexpr int x3ButtonY = 155;
 
-    if (topBtn != nullptr && topBtn[0] != '\0') {
+    if (hasHint(hints[0])) {
       const int leftX = buttonMargin;
       renderer.drawRect(leftX, x3ButtonY, buttonWidth, buttonHeight);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, topBtn);
-      const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-      const int textX = leftX + (buttonWidth - textHeight) / 2;
-      const int textY = x3ButtonY + (buttonHeight + textWidth) / 2;
-      renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, topBtn);
+      drawHint(hints[0], leftX, x3ButtonY);
     }
 
-    if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
+    if (hasHint(hints[1])) {
       const int rightX = screenWidth - buttonMargin - buttonWidth;
       renderer.drawRect(rightX, x3ButtonY, buttonWidth, buttonHeight);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, bottomBtn);
-      const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-      const int textX = rightX + (buttonWidth - textHeight) / 2;
-      const int textY = x3ButtonY + (buttonHeight + textWidth) / 2;
-      renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, bottomBtn);
+      drawHint(hints[1], rightX, x3ButtonY);
     }
   } else {
     // X4 layout: Both buttons stacked on right side
     constexpr int topButtonY = 345;
-    const char* labels[] = {topBtn, bottomBtn};
     const int x = screenWidth - buttonMargin - buttonWidth;
 
-    if (topBtn != nullptr && topBtn[0] != '\0') {
+    if (hasHint(hints[0])) {
       renderer.drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);
       renderer.drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);
       renderer.drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + buttonHeight - 1);
     }
 
-    if ((topBtn != nullptr && topBtn[0] != '\0') || (bottomBtn != nullptr && bottomBtn[0] != '\0')) {
+    if (hasHint(hints[0]) || hasHint(hints[1])) {
       renderer.drawLine(x, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + buttonHeight);
     }
 
-    if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
+    if (hasHint(hints[1])) {
       renderer.drawLine(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);
       renderer.drawLine(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1,
                         topButtonY + 2 * buttonHeight - 1);
@@ -242,13 +653,9 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
     }
 
     for (int i = 0; i < 2; i++) {
-      if (labels[i] != nullptr && labels[i][0] != '\0') {
+      if (hasHint(hints[i])) {
         const int y = topButtonY + i * buttonHeight;
-        const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-        const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-        const int textX = x + (buttonWidth - textHeight) / 2;
-        const int textY = y + (buttonHeight + textWidth) / 2;
-        renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, labels[i]);
+        drawHint(hints[i], x, y);
       }
     }
   }
@@ -473,8 +880,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   (void)selectorIndex;
   (void)bufferRestored;
   if (recentBooks.empty()) {
-    const int y = rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) /
-                                 2;
+    const int y =
+        rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
     renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK));
     renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), tr(STR_START_READING));
     return;
@@ -491,8 +898,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     if (Storage.openFileForRead("HOME", coverPath, file)) {
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() == BmpReaderError::Ok && bitmap.getWidth() > 0 && bitmap.getHeight() > 0) {
-        localCoverWidth = std::max(1, static_cast<int>(bitmap.getWidth() *
-                                                        static_cast<float>(coverHeight) / bitmap.getHeight()));
+        localCoverWidth =
+            std::max(1, static_cast<int>(bitmap.getWidth() * static_cast<float>(coverHeight) / bitmap.getHeight()));
         localCoverWidth = std::min(localCoverWidth, rect.width * 2 / 3);
         renderer.drawBitmap(bitmap, rect.x, rect.y, localCoverWidth, coverHeight);
         hasCover = true;
@@ -568,12 +975,22 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     std::string labelStr = buttonLabel(i);
     const char* label = labelStr.c_str();
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
-    const int textX = rect.x + (rect.width - textWidth) / 2;
+    constexpr int iconSize = 24;
+    constexpr int iconGap = 10;
+    const uint8_t* iconBitmap = rowIcon != nullptr ? getUIIconBitmap(rowIcon(i), iconSize) : nullptr;
+    const int contentWidth = textWidth + (iconBitmap != nullptr ? iconSize + iconGap : 0);
+    int textX = rect.x + (rect.width - contentWidth) / 2;
     const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
     const int textY =
         tileY + (BaseMetrics::values.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
+
+    if (iconBitmap != nullptr) {
+      drawUIIcon(renderer, rowIcon(i), textX, tileY + (BaseMetrics::values.menuRowHeight - iconSize) / 2, iconSize,
+                 !selected);
+      textX += iconSize + iconGap;
+    }
     // Invert text when the tile is selected, to contrast with the filled background
-    renderer.drawText(UI_10_FONT_ID, textX, textY, label, selectedIndex != i);
+    renderer.drawText(UI_10_FONT_ID, textX, textY, label, !selected);
   }
 }
 

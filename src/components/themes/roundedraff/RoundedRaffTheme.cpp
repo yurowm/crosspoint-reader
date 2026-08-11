@@ -207,7 +207,6 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 void RoundedRaffTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                       const std::function<std::string(int index)>& buttonLabel,
                                       const std::function<UIIcon(int index)>& rowIcon) const {
-  (void)rowIcon;
   const int sidePadding = RoundedRaffMetrics::values.contentSidePadding;
   const int rowX = rect.x + sidePadding;
   const int rowHeight = renderer.getLineHeight(kTitleFontId) + 20;  // 10px top + 10px bottom
@@ -224,20 +223,25 @@ void RoundedRaffTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int butt
     const std::string label = buttonLabel(i);
     const int rowY = menuTop + (i - pageStartIndex) * rowStep;
     constexpr int kRowPaddingX = 40;  // 20px L/R
-    const int maxLabelWidth = std::max(0, menuMaxWidth - kRowPaddingX);
+    constexpr int iconSize = 24;
+    constexpr int iconGap = 10;
+    const uint8_t* iconBitmap = rowIcon != nullptr ? getUIIconBitmap(rowIcon(i), iconSize) : nullptr;
+    const int iconAreaWidth = iconBitmap != nullptr ? iconSize + iconGap : 0;
+    const int maxLabelWidth = std::max(0, menuMaxWidth - kRowPaddingX - iconAreaWidth);
     const std::string truncatedLabel =
         renderer.truncatedText(kTitleFontId, label.c_str(), maxLabelWidth, EpdFontFamily::BOLD);
-    const int rowWidth = std::min(
-        menuMaxWidth, renderer.getTextWidth(kTitleFontId, truncatedLabel.c_str(), EpdFontFamily::BOLD) + kRowPaddingX);
+    const int rowWidth =
+        std::min(menuMaxWidth, renderer.getTextWidth(kTitleFontId, truncatedLabel.c_str(), EpdFontFamily::BOLD) +
+                                   kRowPaddingX + iconAreaWidth);
     const bool isSelected = selectedIndex == i;
     renderer.fillRoundedRect(rowX, rowY, rowWidth, rowHeight, kMenuRadius, isSelected ? Color::Black : Color::White);
     const int textY = rowY + (rowHeight - textLineHeight) / 2;
-    const int textX = rowX + kInteractiveInsetX;
-    if (selectedIndex == i) {
-      renderer.drawText(kTitleFontId, textX, textY, truncatedLabel.c_str(), false, EpdFontFamily::BOLD);
-    } else {
-      renderer.drawText(kTitleFontId, textX, textY, truncatedLabel.c_str(), true, EpdFontFamily::BOLD);
+    int textX = rowX + kInteractiveInsetX;
+    if (iconBitmap != nullptr) {
+      drawUIIcon(renderer, rowIcon(i), textX, rowY + (rowHeight - iconSize) / 2, iconSize, !isSelected);
+      textX += iconAreaWidth;
     }
+    renderer.drawText(kTitleFontId, textX, textY, truncatedLabel.c_str(), !isSelected, EpdFontFamily::BOLD);
   }
 
   drawScrollBar(renderer, rect, buttonCount, pageStartIndex, pageItems);
@@ -353,55 +357,60 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
 
 void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                        const char* btn4) const {
+  drawIconButtonHints(renderer, buttonHintFromLabel(btn1, HalGPIO::BTN_BACK),
+                      buttonHintFromLabel(btn2, HalGPIO::BTN_CONFIRM), buttonHintFromLabel(btn3, HalGPIO::BTN_LEFT),
+                      buttonHintFromLabel(btn4, HalGPIO::BTN_RIGHT));
+}
+
+void RoundedRaffTheme::drawIconButtonHints(GfxRenderer& renderer, const ButtonHint& btn1, const ButtonHint& btn2,
+                                           const ButtonHint& btn3, const ButtonHint& btn4) const {
   if (gpio.hasTouch()) {
     return;
   }
 
-  const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
+  const GfxRenderer::Orientation originalOrientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
-  const int sidePadding = 20;
-  const int groupGap = 10;
-  const int bottomMargin = 10;
-  const int hintHeight = RoundedRaffMetrics::values.buttonHintsHeight - 10;  // 30px total guide height
+  constexpr int sidePadding = 20;
+  constexpr int groupGap = 10;
+  constexpr int bottomMargin = 10;
+  constexpr int iconSize = 24;
+  constexpr int innerEdgePadding = 16;
+  const int hintHeight = RoundedRaffMetrics::values.buttonHintsHeight - 10;
   const int groupWidth = (pageWidth - sidePadding * 2 - groupGap) / 2;
   const int hintY = pageHeight - hintHeight - bottomMargin;
-  const int textY = hintY + (hintHeight - renderer.getLineHeight(kGuideFontId)) / 2;
-
-  const bool backDisabled = (btn1 == nullptr || btn1[0] == '\0');
+  const int centerY = hintY + hintHeight / 2;
   const int leftGroupX = sidePadding;
   const int rightGroupX = leftGroupX + groupWidth + groupGap;
-  const std::string backLabel = backDisabled ? "" : std::string(btn1);
-  // Callers should provide the button labels. If a label is not specified, it should render empty.
-  const std::string selectText = (btn2 && btn2[0] != '\0') ? std::string(btn2) : "";
-  const std::string upText = (btn3 && btn3[0] != '\0') ? std::string(btn3) : "";
-  const std::string downText = (btn4 && btn4[0] != '\0') ? std::string(btn4) : "";
 
-  // Ensure button hints always "win" visually even if other elements accidentally render into this area.
   renderer.fillRect(leftGroupX, hintY, groupWidth, hintHeight, false);
   renderer.fillRect(rightGroupX, hintY, groupWidth, hintHeight, false);
-
   renderer.drawRoundedRect(leftGroupX, hintY, groupWidth, hintHeight, 2, kBottomRadius, true);
-  const int selectWidth = renderer.getTextWidth(kGuideFontId, selectText.c_str(), EpdFontFamily::REGULAR);
-  const int downWidth = renderer.getTextWidth(kGuideFontId, downText.c_str(), EpdFontFamily::REGULAR);
-  constexpr int innerEdgePadding = 16;
-
-  const int backX = leftGroupX + innerEdgePadding;
-  const int selectX = leftGroupX + groupWidth - innerEdgePadding - selectWidth;
-  const int upX = rightGroupX + innerEdgePadding;
-  const int downX = rightGroupX + groupWidth - innerEdgePadding - downWidth;
-
-  if (!backDisabled) {
-    renderer.drawText(kGuideFontId, backX, textY, backLabel.c_str(), true, EpdFontFamily::REGULAR);
-  }
-  renderer.drawText(kGuideFontId, selectX, textY, selectText.c_str(), true, EpdFontFamily::REGULAR);
-
   renderer.drawRoundedRect(rightGroupX, hintY, groupWidth, hintHeight, 2, kBottomRadius, true);
 
-  renderer.drawText(kGuideFontId, upX, textY, upText.c_str(), true, EpdFontFamily::REGULAR);
-  renderer.drawText(kGuideFontId, downX, textY, downText.c_str(), true, EpdFontFamily::REGULAR);
+  const int btn1Width = getButtonHintContentWidth(renderer, btn1, iconSize, kGuideFontId);
+  const int btn2Width = getButtonHintContentWidth(renderer, btn2, iconSize, kGuideFontId);
+  const int btn3Width = getButtonHintContentWidth(renderer, btn3, iconSize, kGuideFontId);
+  const int btn4Width = getButtonHintContentWidth(renderer, btn4, iconSize, kGuideFontId);
 
-  renderer.setOrientation(origOrientation);
+  if (btn1Width > 0) {
+    drawButtonHintContent(renderer, btn1, leftGroupX + innerEdgePadding + btn1Width / 2, centerY, iconSize,
+                          kGuideFontId);
+  }
+  if (btn2Width > 0) {
+    drawButtonHintContent(renderer, btn2, leftGroupX + groupWidth - innerEdgePadding - btn2Width / 2, centerY, iconSize,
+                          kGuideFontId);
+  }
+  if (btn3Width > 0) {
+    drawButtonHintContent(renderer, btn3, rightGroupX + innerEdgePadding + btn3Width / 2, centerY, iconSize,
+                          kGuideFontId);
+  }
+  if (btn4Width > 0) {
+    drawButtonHintContent(renderer, btn4, rightGroupX + groupWidth - innerEdgePadding - btn4Width / 2, centerY,
+                          iconSize, kGuideFontId);
+  }
+
+  renderer.setOrientation(originalOrientation);
 }

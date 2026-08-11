@@ -142,10 +142,10 @@ void ButtonRemapActivity::render(RenderLock&&) {
 
   // Live preview of logical labels under front buttons.
   // This mirrors the on-device front button order: Back, Confirm, Left, Right.
-  GUI.drawButtonHints(renderer, labelForHardware(CrossPointSettings::FRONT_HW_BACK),
-                      labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM),
-                      labelForHardware(CrossPointSettings::FRONT_HW_LEFT),
-                      labelForHardware(CrossPointSettings::FRONT_HW_RIGHT));
+  GUI.drawIconButtonHints(renderer, {.label = labelForHardware(CrossPointSettings::FRONT_HW_BACK)},
+                          {.label = labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM)},
+                          {.label = labelForHardware(CrossPointSettings::FRONT_HW_LEFT)},
+                          {.label = labelForHardware(CrossPointSettings::FRONT_HW_RIGHT)});
   renderer.displayBuffer();
 }
 

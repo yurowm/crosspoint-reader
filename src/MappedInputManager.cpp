@@ -344,6 +344,13 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
   return mapFrontLabels(back, confirm, leftLabel, rightLabel);
 }
 
+MappedInputManager::NavigationActions MappedInputManager::mapNavigationActions() const {
+  const bool swapActions = isNavDirectionSwapped();
+  const NavigationAction leftAction = swapActions ? NavigationAction::Next : NavigationAction::Previous;
+  const NavigationAction rightAction = swapActions ? NavigationAction::Previous : NavigationAction::Next;
+  return mapFrontNavigationActions(leftAction, rightAction);
+}
+
 MappedInputManager::Labels MappedInputManager::mapDirectionalLabels(const char* back, const char* confirm,
                                                                     const char* left, const char* right, const char* up,
                                                                     const char* down) const {
@@ -379,6 +386,28 @@ MappedInputManager::Labels MappedInputManager::mapFrontLabels(const char* back, 
 
   return {labelForHardware(HalGPIO::BTN_BACK), labelForHardware(HalGPIO::BTN_CONFIRM),
           labelForHardware(HalGPIO::BTN_LEFT), labelForHardware(HalGPIO::BTN_RIGHT)};
+}
+
+MappedInputManager::NavigationActions MappedInputManager::mapFrontNavigationActions(
+    const NavigationAction left, const NavigationAction right) const {
+  const auto actionForHardware = [&](const uint8_t hw) {
+    if (hw == SETTINGS.frontButtonBack) {
+      return NavigationAction::Back;
+    }
+    if (hw == SETTINGS.frontButtonConfirm) {
+      return NavigationAction::Confirm;
+    }
+    if (hw == SETTINGS.frontButtonLeft) {
+      return left;
+    }
+    if (hw == SETTINGS.frontButtonRight) {
+      return right;
+    }
+    return NavigationAction::None;
+  };
+
+  return {actionForHardware(HalGPIO::BTN_BACK), actionForHardware(HalGPIO::BTN_CONFIRM),
+          actionForHardware(HalGPIO::BTN_LEFT), actionForHardware(HalGPIO::BTN_RIGHT)};
 }
 
 int MappedInputManager::getPressedFrontButton() const {

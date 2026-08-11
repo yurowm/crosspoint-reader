@@ -14,9 +14,8 @@ bool matchesSelection(const std::vector<std::string>& values, const std::set<std
   if (selected.empty()) {
     return true;
   }
-  return std::any_of(values.begin(), values.end(), [&selected](const std::string& value) {
-    return selected.contains(value);
-  });
+  return std::any_of(values.begin(), values.end(),
+                     [&selected](const std::string& value) { return selected.contains(value); });
 }
 
 std::vector<std::string> authorValues(const LibraryBook& book) {
@@ -257,7 +256,7 @@ void LibraryFiltersActivity::render(RenderLock&&) {
         });
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
