@@ -64,19 +64,18 @@ bool writeStringList(HalFile& file, const std::vector<std::string>& values) {
   if (values.size() > MAX_LIST_ITEMS || values.size() > std::numeric_limits<uint16_t>::max()) return false;
   const uint16_t count = static_cast<uint16_t>(values.size());
   if (!writePod(file, count)) return false;
-  return std::all_of(values.begin(), values.end(), [&file](const std::string& value) {
-    return writeString(file, value);
-  });
+  return std::all_of(values.begin(), values.end(),
+                     [&file](const std::string& value) { return writeString(file, value); });
 }
 
 bool readBook(HalFile& file, LibraryBook& book) {
   uint8_t started = 0;
-  const bool ok =
-      readPod(file, book.fileSize) && readPod(file, book.modifiedDate) && readPod(file, book.modifiedTime) &&
-      readString(file, book.path) && readString(file, book.title) && readString(file, book.author) &&
-      readStringList(file, book.authors) && readString(file, book.series) && readString(file, book.seriesIndex) &&
-      readStringList(file, book.tags) && readString(file, book.coverBmpPath) &&
-      readPod(file, book.progressPercent) && readPod(file, started);
+  const bool ok = readPod(file, book.fileSize) && readPod(file, book.modifiedDate) &&
+                  readPod(file, book.modifiedTime) && readString(file, book.path) && readString(file, book.title) &&
+                  readString(file, book.author) && readStringList(file, book.authors) &&
+                  readString(file, book.series) && readString(file, book.seriesIndex) &&
+                  readStringList(file, book.tags) && readString(file, book.coverBmpPath) &&
+                  readPod(file, book.progressPercent) && readPod(file, started);
   if (!ok) return false;
   book.started = started != 0;
   return !book.path.empty() && book.path.front() == '/';
@@ -106,7 +105,8 @@ bool LibraryIndex::load(std::vector<LibraryBook>& books) {
 
   std::array<uint8_t, HEADER.size()> header{};
   uint32_t count = 0;
-  if (!readExact(file, header.data(), header.size()) || header != HEADER || !readPod(file, count) || count > MAX_BOOKS) {
+  if (!readExact(file, header.data(), header.size()) || header != HEADER || !readPod(file, count) ||
+      count > MAX_BOOKS) {
     LOG_ERR("LIDX", "Invalid library index header");
     file.close();
     return false;
@@ -143,9 +143,7 @@ bool LibraryIndex::save(const std::vector<LibraryBook>& books) {
   const uint32_t count = static_cast<uint32_t>(books.size());
   bool ok = writeExact(file, HEADER.data(), HEADER.size()) && writePod(file, count);
   if (ok) {
-    ok = std::all_of(books.begin(), books.end(), [&file](const LibraryBook& book) {
-      return writeBook(file, book);
-    });
+    ok = std::all_of(books.begin(), books.end(), [&file](const LibraryBook& book) { return writeBook(file, book); });
   }
   if (ok) file.flush();
   file.close();
@@ -182,8 +180,8 @@ bool LibraryIndex::updateProgress(const std::string& path, const uint8_t progres
 bool LibraryIndex::invalidate(const std::string& path) {
   std::vector<LibraryBook> books;
   if (!load(books)) return true;
-  const auto end = std::remove_if(books.begin(), books.end(),
-                                  [&path](const LibraryBook& book) { return book.path == path; });
+  const auto end =
+      std::remove_if(books.begin(), books.end(), [&path](const LibraryBook& book) { return book.path == path; });
   if (end == books.end()) return true;
   books.erase(end, books.end());
   return save(books);

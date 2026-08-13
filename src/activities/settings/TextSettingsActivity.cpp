@@ -387,21 +387,20 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       SETTINGS.saveToFile();
       requestUpdate();
       break;
-    case LayoutRow::LineSpacing:
-      {
-        std::vector<std::string> options;
-        options.reserve((LINE_SPACING_MAX - LINE_SPACING_MIN) / LINE_SPACING_STEP + 1);
-        for (int percent = LINE_SPACING_MIN; percent <= LINE_SPACING_MAX; percent += LINE_SPACING_STEP) {
-          options.push_back(std::to_string(percent) + "%");
-        }
-        const int current =
-            (std::clamp<int>(SETTINGS.lineSpacing, LINE_SPACING_MIN, LINE_SPACING_MAX) - LINE_SPACING_MIN) /
-            LINE_SPACING_STEP;
-        optionPopup_.show(StrId::STR_LINE_SPACING, options, current, [](int idx) {
-                          SETTINGS.lineSpacing = static_cast<uint8_t>(LINE_SPACING_MIN + idx * LINE_SPACING_STEP);
-                          SETTINGS.saveToFile();
-                        });
+    case LayoutRow::LineSpacing: {
+      std::vector<std::string> options;
+      options.reserve((LINE_SPACING_MAX - LINE_SPACING_MIN) / LINE_SPACING_STEP + 1);
+      for (int percent = LINE_SPACING_MIN; percent <= LINE_SPACING_MAX; percent += LINE_SPACING_STEP) {
+        options.push_back(std::to_string(percent) + "%");
       }
+      const int current =
+          (std::clamp<int>(SETTINGS.lineSpacing, LINE_SPACING_MIN, LINE_SPACING_MAX) - LINE_SPACING_MIN) /
+          LINE_SPACING_STEP;
+      optionPopup_.show(StrId::STR_LINE_SPACING, options, current, [](int idx) {
+        SETTINGS.lineSpacing = static_cast<uint8_t>(LINE_SPACING_MIN + idx * LINE_SPACING_STEP);
+        SETTINGS.saveToFile();
+      });
+    }
       requestUpdate();
       break;
     case LayoutRow::Alignment:

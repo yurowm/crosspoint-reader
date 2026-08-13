@@ -4,10 +4,9 @@
 #include <string>
 #include <vector>
 
+#include "LibraryActivity.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
-
-#include "LibraryActivity.h"
 
 class LibraryFiltersActivity final : public Activity {
   enum class Screen { Menu, Values };

@@ -182,8 +182,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   } else {
     const int clampedSpacing = std::clamp<int>(storedLineSpacing, LINE_SPACING_MIN, LINE_SPACING_MAX);
-    const int spacingSteps =
-        (clampedSpacing - LINE_SPACING_MIN + LINE_SPACING_STEP / 2) / LINE_SPACING_STEP;
+    const int spacingSteps = (clampedSpacing - LINE_SPACING_MIN + LINE_SPACING_STEP / 2) / LINE_SPACING_STEP;
     lineSpacing = static_cast<uint8_t>(LINE_SPACING_MIN + spacingSteps * LINE_SPACING_STEP);
     if (lineSpacing != storedLineSpacing) needsResave = true;
   }

@@ -32,11 +32,9 @@ bool startsWithImageMediaType(const std::string& mediaType) {
 }
 
 std::string trimMetadataText(const std::string& value) {
-  const auto first = std::find_if_not(value.begin(), value.end(),
-                                      [](unsigned char c) { return std::isspace(c); });
-  const auto last = std::find_if_not(value.rbegin(), value.rend(),
-                                     [](unsigned char c) { return std::isspace(c); })
-                        .base();
+  const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char c) { return std::isspace(c); });
+  const auto last =
+      std::find_if_not(value.rbegin(), value.rend(), [](unsigned char c) { return std::isspace(c); }).base();
   return first < last ? std::string(first, last) : std::string();
 }
 }  // namespace

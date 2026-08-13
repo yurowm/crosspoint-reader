@@ -125,6 +125,9 @@ class BookMetadataCache {
   void setCoreMetadata(BookMetadata metadata);
   SpineEntry getSpineEntry(int index);
   TocEntry getTocEntry(int index);
+  // Cumulative byte size up to and including the given spine item (0 if out of range
+  // or not loaded). Backed by the in-RAM cumulativeSizes cache populated in load().
+  uint32_t getCumulativeSize(int index) const;
   int getSpineCount() const { return spineCount; }
   int getTocCount() const { return tocCount; }
   bool isLoaded() const { return loaded; }
