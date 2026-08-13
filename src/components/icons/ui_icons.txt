@@ -1,5 +1,5 @@
 continue-reading = book-marked
-library = library-big
+menu-library = library-big
 recent = clock-3
 transfer = folder-sync
 settings = cog
