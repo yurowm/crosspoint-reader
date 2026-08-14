@@ -14,6 +14,7 @@ namespace {
 constexpr int TEXT_VERTICAL_INSET = 7;
 constexpr int TEXT_GAP = 14;
 constexpr int PROGRESS_BAR_HEIGHT = 5;
+constexpr float TITLE_LINE_SPACING = 0.5f;
 constexpr size_t TITLE_LINE_BUFFER_SIZE = 192;
 constexpr char ELLIPSIS[] = "\xe2\x80\xa6";
 
@@ -59,7 +60,8 @@ PrefixFit fitPrefix(const GfxRenderer& renderer, const int fontId, const char* t
   return fit;
 }
 
-int drawTitle(const GfxRenderer& renderer, const std::string& title, const int x, const int y, const int maxWidth) {
+int drawTitle(const GfxRenderer& renderer, const std::string& title, const int x, const int y, const int maxWidth,
+              const int lineStep) {
   constexpr auto style = EpdFontFamily::BOLD;
   if (maxWidth <= 0 || title.empty()) return 1;
   if (renderer.getTextWidth(UI_12_FONT_ID, title.c_str(), style) <= maxWidth) {
@@ -81,7 +83,7 @@ int drawTitle(const GfxRenderer& renderer, const std::string& title, const int x
   const char* remainder = title.c_str() + split;
   while (*remainder == ' ') remainder++;
   if (*remainder == '\0') return 1;
-  const int secondY = y + renderer.getLineHeight(UI_12_FONT_ID);
+  const int secondY = y + lineStep;
   if (renderer.getTextWidth(UI_12_FONT_ID, remainder, style) <= maxWidth) {
     renderer.drawText(UI_12_FONT_ID, x, secondY, remainder, true, style);
     return 2;
@@ -152,8 +154,9 @@ int draw(GfxRenderer& renderer, const LibraryBook& book, const int x, const int 
   const int textWidth = std::max(0, textRight - textX);
   const int titleY = y + TEXT_VERTICAL_INSET;
   const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int titleLineCount = drawTitle(renderer, book.title, textX, titleY, textWidth);
-  const int authorY = titleY + titleLineCount * titleLineHeight + 5;
+  const int titleLineStep = std::max(1, renderer.getLineHeight(UI_12_FONT_ID, TITLE_LINE_SPACING));
+  const int titleLineCount = drawTitle(renderer, book.title, textX, titleY, textWidth, titleLineStep);
+  const int authorY = titleY + titleLineHeight + (titleLineCount - 1) * titleLineStep + 5;
   if (!book.author.empty()) {
     const auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
     renderer.drawText(UI_10_FONT_ID, textX, authorY, author.c_str());
