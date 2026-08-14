@@ -1,42 +1,31 @@
 #pragma once
-#include <I18n.h>
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
-#include "RecentBooksStore.h"
-#include "activities/UiListActivity.h"
+#include "LibraryIndex.h"
+#include "activities/Activity.h"
+#include "util/ButtonNavigator.h"
 
-class RecentBooksActivity final : public UiListActivity {
- public:
-  explicit RecentBooksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
-  void onEnter() override;
-  void onExit() override;
+class RecentBooksActivity final : public Activity {
+  enum class CoverAttemptResult { None, Attempted, Updated };
 
- private:
-  int listCount() const override { return static_cast<int>(recentBooks.size()); }
-  void buildScreen(UiScreen& screen) override;
-  void activateIndex(int index) override;
-  void onRowLongPress(int index) override;
-  // Confirm activates on RELEASE here (a hold is "remove from list"), and Back
-  // goes home rather than finishing.
-  bool handleButtons() override;
-  const char* headerTitle() const override { return tr(STR_MENU_RECENT_BOOKS); }
-  void drawFooter() override;
-
-  // Set when a long-press has fired; input is swallowed until Confirm is released
-  // again so the release doesn't also open the book.
+  ButtonNavigator buttonNavigator;
+  std::vector<LibraryBook> recentBooks;
+  size_t selectorIndex = 0;
   bool longPressFired = false;
 
-  std::vector<RecentBook> recentBooks;
-  // Row buffer, built in loadRecentBooks() (not buildScreen(), which reuses
-  // it on every repaint instead of rebuilding a ListItem vector per render).
-  std::vector<freeink::ui::ListItem> rowItems;
-  void rebuildRowItems();
-
-  // Data loading
   void loadRecentBooks();
-
-  // Show an OK/Cancel prompt to remove the given book from the Recent Books list.
+  CoverAttemptResult ensureNextVisibleCover();
   void promptRemoveBook(const std::string& path, const std::string& title);
+
+ public:
+  explicit RecentBooksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("RecentBooks", renderer, mappedInput) {}
+
+  void onEnter() override;
+  void onExit() override;
+  void loop() override;
+  void render(RenderLock&&) override;
 };

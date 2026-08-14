@@ -33,10 +33,15 @@ struct LibraryFileInfo {
 
 class LibraryIndex {
  public:
+  using BookVisitor = bool (*)(const LibraryBook& book, void* context);
+
   static constexpr const char* FILE_PATH = "/.crosspoint/library.idx";
 
   static bool load(std::vector<LibraryBook>& books);
   static bool save(const std::vector<LibraryBook>& books);
+  // Reads one entry at a time and stops when visitor returns false. This keeps
+  // callers that need only a few books from retaining the complete index.
+  static bool visitBooks(BookVisitor visitor, void* context);
 
   // Best-effort helpers for mutations that happen outside LibraryActivity.
   // Missing index files and paths are successful no-ops.

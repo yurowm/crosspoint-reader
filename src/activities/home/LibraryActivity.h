@@ -23,7 +23,6 @@ struct LibraryFilterState {
 };
 
 class LibraryActivity final : public Activity {
-  static constexpr int BOOKS_PER_PAGE = 4;
   enum class CoverAttemptResult { None, Attempted, Updated };
 
   ButtonNavigator buttonNavigator;
@@ -42,7 +41,6 @@ class LibraryActivity final : public Activity {
   LibraryBook loadBook(const LibraryFileInfo& file);
   CoverAttemptResult ensureNextVisibleCover();
   void openFilters();
-  void drawBookCover(const LibraryBook& book, int x, int y, int width, int height) const;
   std::vector<size_t> filteredBookIndices() const;
   bool matchesFilters(const LibraryBook& book) const;
 

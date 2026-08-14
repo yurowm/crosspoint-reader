@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <array>
@@ -126,6 +127,43 @@ bool LibraryIndex::load(std::vector<LibraryBook>& books) {
   }
   file.close();
   LOG_DBG("LIDX", "Loaded %u library entries", static_cast<unsigned>(books.size()));
+  return true;
+}
+
+bool LibraryIndex::visitBooks(const BookVisitor visitor, void* context) {
+  if (!visitor || !Storage.exists(FILE_PATH)) return false;
+
+  HalFile file;
+  if (!Storage.openFileForRead("LIDX", FILE_PATH, file)) return false;
+  if (file.fileSize64() > MAX_INDEX_BYTES) {
+    LOG_ERR("LIDX", "Library index is too large");
+    return false;
+  }
+
+  std::array<uint8_t, HEADER.size()> header{};
+  uint32_t count = 0;
+  if (!readExact(file, header.data(), header.size()) || header != HEADER || !readPod(file, count) ||
+      count > MAX_BOOKS) {
+    LOG_ERR("LIDX", "Invalid library index header");
+    return false;
+  }
+
+  // LibraryBook is larger than the C3's safe local-variable budget. One
+  // reusable heap object bounds peak memory and avoids retaining every entry.
+  auto book = makeUniqueNoThrow<LibraryBook>();
+  if (!book) {
+    LOG_ERR("LIDX", "OOM: LibraryBook visitor buffer");
+    return false;
+  }
+
+  for (uint32_t i = 0; i < count; i++) {
+    if (!readBook(file, *book)) {
+      LOG_ERR("LIDX", "Truncated library index at entry %u", static_cast<unsigned>(i));
+      return false;
+    }
+    book->progressPercent = std::min<uint8_t>(book->progressPercent, 100);
+    if (!visitor(*book, context)) break;
+  }
   return true;
 }
 

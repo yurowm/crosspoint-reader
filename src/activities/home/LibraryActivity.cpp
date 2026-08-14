@@ -1,6 +1,5 @@
 #include "LibraryActivity.h"
 
-#include <Bitmap.h>
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -16,6 +15,7 @@
 
 #include "LibraryFiltersActivity.h"
 #include "MappedInputManager.h"
+#include "components/BookListItem.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
@@ -23,10 +23,6 @@
 namespace {
 constexpr int DIRECTORY_STACK_RESERVE = 16;
 constexpr int FILE_NAME_BUFFER_SIZE = 500;
-constexpr int ROW_GAP = 3;
-constexpr int ROW_TEXT_VERTICAL_INSET = 7;
-constexpr int TEXT_GAP = 14;
-constexpr int PROGRESS_BAR_HEIGHT = 5;
 constexpr size_t SCAN_PROGRESS_UPDATES = 10;
 constexpr unsigned long FILTER_HOLD_MS = 1000;
 
@@ -40,15 +36,6 @@ uint16_t readLe16(const uint8_t* data) { return static_cast<uint16_t>(data[0] | 
 uint32_t readLe32(const uint8_t* data) {
   return static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) |
          (static_cast<uint32_t>(data[2]) << 16) | (static_cast<uint32_t>(data[3]) << 24);
-}
-
-std::string displaySeriesIndex(std::string index) {
-  const size_t decimalPoint = index.find('.');
-  if (decimalPoint != std::string::npos && decimalPoint + 1 < index.size() &&
-      index.find_first_not_of('0', decimalPoint + 1) == std::string::npos) {
-    index.erase(decimalPoint);
-  }
-  return index;
 }
 
 bool matchesSelection(const std::vector<std::string>& values, const std::set<std::string>& selected) {
@@ -73,6 +60,7 @@ ButtonHint libraryButtonHint(const MappedInputManager::NavigationAction action) 
       return {};
   }
 }
+
 }  // namespace
 
 std::string LibraryActivity::filenameStem(const std::string& path) {
@@ -156,7 +144,7 @@ LibraryBook LibraryActivity::loadBook(const LibraryFileInfo& file) {
       book.series = epub.getSeries();
       book.seriesIndex = epub.getSeriesIndex();
       book.tags = epub.getSubjects();
-      const std::string thumb = epub.getThumbBmpPath(140);
+      const std::string thumb = epub.getThumbBmpPath(BookListItem::DEFAULT_COVER_CACHE_HEIGHT);
       if (Storage.exists(thumb.c_str())) {
         book.coverBmpPath = thumb;
       }
@@ -169,7 +157,7 @@ LibraryBook LibraryActivity::loadBook(const LibraryFileInfo& file) {
     if (xtc.load()) {
       if (!xtc.getTitle().empty()) book.title = xtc.getTitle();
       book.author = xtc.getAuthor();
-      const std::string thumb = xtc.getThumbBmpPath(140);
+      const std::string thumb = xtc.getThumbBmpPath(BookListItem::DEFAULT_COVER_CACHE_HEIGHT);
       if (Storage.exists(thumb.c_str())) {
         book.coverBmpPath = thumb;
       }
@@ -330,12 +318,23 @@ LibraryActivity::CoverAttemptResult LibraryActivity::ensureNextVisibleCover() {
   const auto bookIndices = filteredBookIndices();
   if (bookIndices.empty()) return CoverAttemptResult::None;
 
-  const size_t pageStart = selectorIndex / BOOKS_PER_PAGE * BOOKS_PER_PAGE;
-  const size_t pageEnd = std::min(bookIndices.size(), pageStart + BOOKS_PER_PAGE);
+  const size_t pageStart = selectorIndex / BookListItem::ITEMS_PER_PAGE * BookListItem::ITEMS_PER_PAGE;
+  const size_t pageEnd = std::min(bookIndices.size(), pageStart + BookListItem::ITEMS_PER_PAGE);
+  bool attemptedAny = false;
   for (size_t index = pageStart; index < pageEnd; index++) {
     LibraryBook& book = books[bookIndices[index]];
     if (book.coverAttempted) continue;
     book.coverAttempted = true;
+    attemptedAny = true;
+
+    if (!book.coverBmpPath.empty()) {
+      const std::string thumbPath =
+          UITheme::getCoverThumbPath(book.coverBmpPath, BookListItem::DEFAULT_COVER_CACHE_HEIGHT);
+      if (thumbPath != book.coverBmpPath) {
+        book.coverBmpPath = thumbPath;
+        indexDirty = true;
+      }
+    }
 
     if (!book.coverBmpPath.empty() && Storage.exists(book.coverBmpPath.c_str())) {
       continue;
@@ -345,8 +344,8 @@ LibraryActivity::CoverAttemptResult LibraryActivity::ensureNextVisibleCover() {
     if (FsHelpers::hasEpubExtension(book.path)) {
       Epub epub(book.path, "/.crosspoint");
       if (epub.loadMetadata()) {
-        const std::string thumb = epub.getThumbBmpPath(140);
-        if (Storage.exists(thumb.c_str()) || epub.generateThumbBmp(140)) {
+        const std::string thumb = epub.getThumbBmpPath(BookListItem::DEFAULT_COVER_CACHE_HEIGHT);
+        if (Storage.exists(thumb.c_str()) || epub.generateThumbBmp(BookListItem::DEFAULT_COVER_CACHE_HEIGHT)) {
           book.coverBmpPath = thumb;
           indexDirty = true;
           return CoverAttemptResult::Updated;
@@ -355,8 +354,8 @@ LibraryActivity::CoverAttemptResult LibraryActivity::ensureNextVisibleCover() {
     } else if (FsHelpers::hasXtcExtension(book.path)) {
       Xtc xtc(book.path, "/.crosspoint");
       if (xtc.load()) {
-        const std::string thumb = xtc.getThumbBmpPath(140);
-        if (Storage.exists(thumb.c_str()) || xtc.generateThumbBmp(140)) {
+        const std::string thumb = xtc.getThumbBmpPath(BookListItem::DEFAULT_COVER_CACHE_HEIGHT);
+        if (Storage.exists(thumb.c_str()) || xtc.generateThumbBmp(BookListItem::DEFAULT_COVER_CACHE_HEIGHT)) {
           book.coverBmpPath = thumb;
           indexDirty = true;
           return CoverAttemptResult::Updated;
@@ -367,7 +366,7 @@ LibraryActivity::CoverAttemptResult LibraryActivity::ensureNextVisibleCover() {
     // the first text-only frame remains visible and responsive.
     return CoverAttemptResult::Attempted;
   }
-  return CoverAttemptResult::None;
+  return attemptedAny ? CoverAttemptResult::Attempted : CoverAttemptResult::None;
 }
 
 bool LibraryActivity::matchesFilters(const LibraryBook& book) const {
@@ -428,13 +427,14 @@ void LibraryActivity::loop() {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
       renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const int rowHeight = std::max(1, (contentHeight - ROW_GAP * (BOOKS_PER_PAGE - 1)) / BOOKS_PER_PAGE);
-  const int pageStart = static_cast<int>(selectorIndex / BOOKS_PER_PAGE) * BOOKS_PER_PAGE;
-  const int visibleRows = std::min(BOOKS_PER_PAGE, bookCount - pageStart);
+  const int rowHeight = BookListItem::rowHeight(contentHeight);
+  const int pageStart = static_cast<int>(selectorIndex / BookListItem::ITEMS_PER_PAGE) * BookListItem::ITEMS_PER_PAGE;
+  const int visibleRows = std::min(BookListItem::ITEMS_PER_PAGE, bookCount - pageStart);
 
   int row = -1;
   const auto touch =
-      mappedInput.rowTouch(row, contentTop, rowHeight + ROW_GAP, visibleRows, 0, renderer.getScreenWidth(), rowHeight);
+      mappedInput.rowTouch(row, contentTop, rowHeight + BookListItem::ROW_GAP, visibleRows, 0,
+                           renderer.getScreenWidth(), rowHeight);
   if (touch != MappedInputManager::RowTouch::None) {
     selectorIndex = static_cast<size_t>(pageStart + row);
     if (touch == MappedInputManager::RowTouch::Tap) {
@@ -452,53 +452,45 @@ void LibraryActivity::loop() {
 
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), bookCount, BOOKS_PER_PAGE);
+    selectorIndex =
+        ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), bookCount, BookListItem::ITEMS_PER_PAGE);
     requestUpdate();
     return;
   }
   if (swipe == MappedInputManager::SwipeDir::Down) {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), bookCount, BOOKS_PER_PAGE);
+    selectorIndex =
+        ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), bookCount, BookListItem::ITEMS_PER_PAGE);
     requestUpdate();
     return;
   }
 
-  buttonNavigator.onNextRelease([this, bookCount] {
+  bool navigationHandled = false;
+  buttonNavigator.onNextRelease([this, bookCount, &navigationHandled] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), bookCount);
+    navigationHandled = true;
     requestUpdate();
   });
-  buttonNavigator.onPreviousRelease([this, bookCount] {
+  buttonNavigator.onPreviousRelease([this, bookCount, &navigationHandled] {
     selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), bookCount);
+    navigationHandled = true;
     requestUpdate();
   });
-  buttonNavigator.onNextContinuous([this, bookCount] {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), bookCount, BOOKS_PER_PAGE);
+  buttonNavigator.onNextContinuous([this, bookCount, &navigationHandled] {
+    selectorIndex =
+        ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), bookCount, BookListItem::ITEMS_PER_PAGE);
+    navigationHandled = true;
     requestUpdate();
   });
-  buttonNavigator.onPreviousContinuous([this, bookCount] {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), bookCount, BOOKS_PER_PAGE);
+  buttonNavigator.onPreviousContinuous([this, bookCount, &navigationHandled] {
+    selectorIndex =
+        ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), bookCount, BookListItem::ITEMS_PER_PAGE);
+    navigationHandled = true;
     requestUpdate();
   });
+  if (navigationHandled) return;
 
-  if (ensureNextVisibleCover() == CoverAttemptResult::Updated) {
+  if (ensureNextVisibleCover() != CoverAttemptResult::None) {
     requestUpdate();
-  }
-}
-
-void LibraryActivity::drawBookCover(const LibraryBook& book, const int x, const int y, const int width,
-                                    const int height) const {
-  if (!book.coverBmpPath.empty()) {
-    HalFile coverFile;
-    if (Storage.openFileForRead("LIB", book.coverBmpPath, coverFile)) {
-      Bitmap bitmap(coverFile);
-      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        const float scale = std::min(1.0f, std::min(static_cast<float>(width) / bitmap.getWidth(),
-                                                    static_cast<float>(height) / bitmap.getHeight()));
-        const int drawWidth = std::max(1, static_cast<int>(bitmap.getWidth() * scale));
-        const int drawHeight = std::max(1, static_cast<int>(bitmap.getHeight() * scale));
-        renderer.drawBitmap(bitmap, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
-      }
-      coverFile.close();
-    }
   }
 }
 
@@ -535,64 +527,20 @@ void LibraryActivity::render(RenderLock&&) {
                                 contentTop + contentHeight / 2,
                                 filters.isActive() ? tr(STR_NO_LIBRARY_FILTERED_BOOKS) : tr(STR_NO_LIBRARY_BOOKS));
     } else {
-      const int rowHeight = std::max(1, (contentHeight - ROW_GAP * (BOOKS_PER_PAGE - 1)) / BOOKS_PER_PAGE);
-      const int pageStart = static_cast<int>(selectorIndex / BOOKS_PER_PAGE) * BOOKS_PER_PAGE;
+      const int rowHeight = BookListItem::rowHeight(contentHeight);
+      const int pageStart =
+          static_cast<int>(selectorIndex / BookListItem::ITEMS_PER_PAGE) * BookListItem::ITEMS_PER_PAGE;
       const int contentSidePadding = metrics.contentSidePadding;
       const int rowWidth = pageWidth - contentSidePadding * 2;
-      const int coverHeight = rowHeight;
-      const int coverWidth = std::max(1, coverHeight * 2 / 3);
-      const int textX = contentSidePadding + coverWidth + TEXT_GAP;
-      const int textWidth = pageWidth - contentSidePadding - textX;
 
-      for (int index = pageStart; index < static_cast<int>(bookIndices.size()) && index < pageStart + BOOKS_PER_PAGE;
+      for (int index = pageStart; index < static_cast<int>(bookIndices.size()) &&
+                                  index < pageStart + BookListItem::ITEMS_PER_PAGE;
            index++) {
-        const int rowY = contentTop + (index - pageStart) * (rowHeight + ROW_GAP);
+        const int rowY = contentTop + (index - pageStart) * (rowHeight + BookListItem::ROW_GAP);
         const bool selected = index == static_cast<int>(selectorIndex);
-        if (selected) {
-          renderer.fillRoundedRect(contentSidePadding, rowY, rowWidth, rowHeight, 5, Color::LightGray);
-        }
 
         const LibraryBook& book = books[bookIndices[index]];
-        drawBookCover(book, contentSidePadding, rowY, coverWidth, coverHeight);
-        renderer.drawRoundedRect(contentSidePadding, rowY, rowWidth, rowHeight, 1, 5, true);
-
-        const int titleY = rowY + ROW_TEXT_VERTICAL_INSET;
-        const auto title = renderer.truncatedText(UI_12_FONT_ID, book.title.c_str(), textWidth, EpdFontFamily::BOLD);
-        renderer.drawText(UI_12_FONT_ID, textX, titleY, title.c_str(), true, EpdFontFamily::BOLD);
-
-        const int authorY = titleY + renderer.getLineHeight(UI_12_FONT_ID) + 5;
-        if (!book.author.empty()) {
-          const auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
-          renderer.drawText(UI_10_FONT_ID, textX, authorY, author.c_str());
-        }
-
-        const int seriesY = authorY + renderer.getLineHeight(UI_10_FONT_ID) + 5;
-        if (!book.series.empty()) {
-          std::string series = book.series;
-          if (!book.seriesIndex.empty()) {
-            series += " · " + displaySeriesIndex(book.seriesIndex);
-          }
-          const auto seriesText = renderer.truncatedText(SMALL_FONT_ID, series.c_str(), textWidth);
-          renderer.drawText(SMALL_FONT_ID, textX, seriesY, seriesText.c_str());
-        }
-
-        if (book.started) {
-          const std::string progressText = std::to_string(book.progressPercent) + "%";
-          const int progressY = rowY + rowHeight - ROW_TEXT_VERTICAL_INSET - renderer.getLineHeight(SMALL_FONT_ID);
-          renderer.drawText(SMALL_FONT_ID, textX, progressY, progressText.c_str());
-          const int labelWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText.c_str());
-          const int barX = textX + labelWidth + 8;
-          const int barRight = pageWidth - contentSidePadding - 3;
-          const int barWidth = std::max(0, barRight - barX);
-          const int barY = progressY + renderer.getLineHeight(SMALL_FONT_ID) / 2 - PROGRESS_BAR_HEIGHT / 2;
-          if (barWidth > 0) {
-            renderer.drawRect(barX, barY, barWidth, PROGRESS_BAR_HEIGHT);
-            const int fillWidth = std::max(0, (barWidth - 2) * book.progressPercent / 100);
-            if (fillWidth > 0) {
-              renderer.fillRect(barX + 1, barY + 1, fillWidth, PROGRESS_BAR_HEIGHT - 2);
-            }
-          }
-        }
+        BookListItem::draw(renderer, book, contentSidePadding, rowY, rowWidth, rowHeight, selected);
       }
     }
   }
