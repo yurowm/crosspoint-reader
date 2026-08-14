@@ -4,6 +4,7 @@
 #include <string>
 
 #include "LibraryIndex.h"
+#include "util/NextBookFinder.h"
 
 class GfxRenderer;
 class MappedInputManager;
@@ -25,6 +26,7 @@ class EndOfBookOptions {
  private:
   GfxRenderer& renderer;
   LibraryBook recommendation;
+  NextBookFinder::Reason recommendationReason = NextBookFinder::Reason::None;
   int selector = 0;
   bool hasRecommendation = false;
   std::atomic<bool> isLoaded{false};

@@ -9,8 +9,6 @@
 #include <cstdlib>
 
 namespace {
-enum class RecommendationTier : uint8_t { Series, Author, Any, None };
-
 struct FindCurrentContext {
   const std::string* path;
   LibraryBook* current;
@@ -21,7 +19,7 @@ struct RecommendationContext {
   const std::string* currentPath;
   const LibraryBook* current;
   LibraryBook* best;
-  RecommendationTier bestTier = RecommendationTier::None;
+  NextBookFinder::Reason bestTier = NextBookFinder::Reason::None;
   bool currentSeriesIndexNumeric = false;
   double currentSeriesIndex = 0.0;
   bool bestSeriesIndexNumeric = false;
@@ -78,7 +76,7 @@ bool considerBook(const LibraryBook& book, void* rawContext) {
     return true;
   }
 
-  RecommendationTier tier = RecommendationTier::Any;
+  NextBookFinder::Reason tier = NextBookFinder::Reason::Unread;
   bool candidateSeriesIndexNumeric = false;
   double candidateSeriesIndex = 0.0;
   const bool sameSeries = !context->current->series.empty() && book.series == context->current->series;
@@ -87,15 +85,15 @@ bool considerBook(const LibraryBook& book, void* rawContext) {
     const bool isNext = context->currentSeriesIndexNumeric
                           ? candidateSeriesIndexNumeric && candidateSeriesIndex > context->currentSeriesIndex
                           : book.seriesIndex != context->current->seriesIndex;
-    if (isNext) tier = RecommendationTier::Series;
+    if (isNext) tier = NextBookFinder::Reason::NextInSeries;
   }
-  if (tier != RecommendationTier::Series && sameAuthor(*context->current, book)) {
-    tier = RecommendationTier::Author;
+  if (tier != NextBookFinder::Reason::NextInSeries && sameAuthor(*context->current, book)) {
+    tier = NextBookFinder::Reason::SameAuthor;
   }
 
   bool replace = tier < context->bestTier;
   if (tier == context->bestTier) {
-    replace = tier == RecommendationTier::Series
+    replace = tier == NextBookFinder::Reason::NextInSeries
                 ? seriesOrderLess(book, candidateSeriesIndexNumeric, candidateSeriesIndex, *context->best,
                                   context->bestSeriesIndexNumeric, context->bestSeriesIndex)
                 : bookOrderLess(book, *context->best);
@@ -110,7 +108,9 @@ bool considerBook(const LibraryBook& book, void* rawContext) {
 }
 }  // namespace
 
-bool NextBookFinder::findRecommendedBook(const std::string& currentBookPath, LibraryBook& recommendation) {
+bool NextBookFinder::findRecommendedBook(const std::string& currentBookPath, LibraryBook& recommendation,
+                                         Reason& reason) {
+  reason = Reason::None;
   if (currentBookPath.empty()) return false;
 
   auto current = makeUniqueNoThrow<LibraryBook>();
@@ -131,7 +131,8 @@ bool NextBookFinder::findRecommendedBook(const std::string& currentBookPath, Lib
       parseSeriesIndex(current->seriesIndex, recommendationContext.currentSeriesIndex);
   if (!LibraryIndex::visitBooks(&considerBook, &recommendationContext)) return false;
 
-  if (recommendationContext.bestTier == RecommendationTier::None) return false;
+  if (recommendationContext.bestTier == Reason::None) return false;
+  reason = recommendationContext.bestTier;
   LOG_DBG("NBF", "Recommended %s (tier %u)", recommendation.path.c_str(),
           static_cast<unsigned>(recommendationContext.bestTier));
   return true;

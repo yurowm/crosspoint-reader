@@ -5,6 +5,8 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
 #include <Xtc.h>
 
 #include <algorithm>
@@ -274,13 +276,9 @@ bool LibraryActivity::scanLibrary(const bool indexLoaded) {
     }
   }
 
-  std::sort(updatedBooks.begin(), updatedBooks.end(), [](const LibraryBook& left, const LibraryBook& right) {
-    if (left.title == right.title) {
-      return FsHelpers::naturalLess(left.path, right.path);
-    }
-    return FsHelpers::naturalLess(left.title, right.title);
-  });
   books = std::move(updatedBooks);
+  sortBooks();
+  restoreSelector();
 
   const bool libraryChanged = !indexLoaded || !changedFiles.empty() || removedBooks;
   if (libraryChanged) {
@@ -292,12 +290,15 @@ bool LibraryActivity::scanLibrary(const bool indexLoaded) {
 void LibraryActivity::onEnter() {
   Activity::onEnter();
   selectorIndex = 0;
+  LibraryViewStateFile::load(viewState);
   lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
   indexDirty = false;
 
   // A valid index paints the complete library immediately. The directory pass
   // that follows only opens book metadata for new or changed source files.
   const bool indexLoaded = LibraryIndex::load(books);
+  sortBooks();
+  restoreSelector();
   scanning = !indexLoaded;
   requestUpdateAndWait();
   const bool libraryChanged = scanLibrary(indexLoaded);
@@ -307,11 +308,14 @@ void LibraryActivity::onEnter() {
 
 void LibraryActivity::onExit() {
   Activity::onExit();
+  rememberSelectedBook();
+  if (viewState.dirty && !LibraryViewStateFile::save(viewState)) {
+    LOG_ERR("LIB", "Failed to persist library view state");
+  }
   if (indexDirty && !LibraryIndex::save(books)) {
     LOG_ERR("LIB", "Failed to persist lazy cover updates");
   }
   books.clear();
-  filters.clear();
 }
 
 LibraryActivity::CoverAttemptResult LibraryActivity::ensureNextVisibleCover() {
@@ -370,13 +374,13 @@ LibraryActivity::CoverAttemptResult LibraryActivity::ensureNextVisibleCover() {
 }
 
 bool LibraryActivity::matchesFilters(const LibraryBook& book) const {
-  if (!matchesSelection(book.authors, filters.authors)) {
+  if (!matchesSelection(book.authors, viewState.authors)) {
     return false;
   }
-  if (!filters.series.empty() && !filters.series.contains(book.series)) {
+  if (!viewState.series.empty() && !viewState.series.contains(book.series)) {
     return false;
   }
-  return matchesSelection(book.tags, filters.tags);
+  return matchesSelection(book.tags, viewState.tags);
 }
 
 std::vector<size_t> LibraryActivity::filteredBookIndices() const {
@@ -390,14 +394,79 @@ std::vector<size_t> LibraryActivity::filteredBookIndices() const {
   return indices;
 }
 
+void LibraryActivity::sortBooks() {
+  const auto byTitle = [](const LibraryBook& left, const LibraryBook& right) {
+    if (left.title == right.title) return FsHelpers::naturalLess(left.path, right.path);
+    return FsHelpers::naturalLess(left.title, right.title);
+  };
+  const auto byAuthor = [&byTitle](const LibraryBook& left, const LibraryBook& right) {
+    if (left.author == right.author) return byTitle(left, right);
+    if (left.author.empty()) return false;
+    if (right.author.empty()) return true;
+    return FsHelpers::naturalLess(left.author, right.author);
+  };
+  const auto bySeries = [&byTitle](const LibraryBook& left, const LibraryBook& right) {
+    if (left.series != right.series) {
+      if (left.series.empty()) return false;
+      if (right.series.empty()) return true;
+      return FsHelpers::naturalLess(left.series, right.series);
+    }
+    if (left.seriesIndex != right.seriesIndex) {
+      if (left.seriesIndex.empty()) return false;
+      if (right.seriesIndex.empty()) return true;
+      return FsHelpers::naturalLess(left.seriesIndex, right.seriesIndex);
+    }
+    return byTitle(left, right);
+  };
+
+  switch (viewState.sortMode) {
+    case LibrarySortMode::Author:
+      std::sort(books.begin(), books.end(), byAuthor);
+      break;
+    case LibrarySortMode::Series:
+      std::sort(books.begin(), books.end(), bySeries);
+      break;
+    case LibrarySortMode::Title:
+    case LibrarySortMode::Count:
+      std::sort(books.begin(), books.end(), byTitle);
+      break;
+  }
+}
+
+void LibraryActivity::restoreSelector() {
+  selectorIndex = 0;
+  if (viewState.selectedBookPath.empty()) return;
+  const auto indices = filteredBookIndices();
+  const auto selected = std::find_if(indices.begin(), indices.end(), [this](const size_t index) {
+    return books[index].path == viewState.selectedBookPath;
+  });
+  if (selected != indices.end()) selectorIndex = static_cast<size_t>(selected - indices.begin());
+}
+
+void LibraryActivity::rememberSelectedBook() {
+  const auto indices = filteredBookIndices();
+  if (indices.empty() || selectorIndex >= indices.size()) return;
+  const std::string& path = books[indices[selectorIndex]].path;
+  if (viewState.selectedBookPath == path) return;
+  viewState.selectedBookPath = path;
+  viewState.dirty = true;
+}
+
 void LibraryActivity::openFilters() {
+  rememberSelectedBook();
   lockLongPressBack = true;
-  startActivityForResult(std::make_unique<LibraryFiltersActivity>(renderer, mappedInput, books, filters),
-                         [this](const ActivityResult&) {
-                           selectorIndex = 0;
-                           lockLongPressBack = false;
-                           requestUpdate();
-                         });
+  auto options = makeUniqueNoThrow<LibraryFiltersActivity>(renderer, mappedInput, books, viewState);
+  if (!options) {
+    LOG_ERR("LIB", "OOM: LibraryFiltersActivity");
+    lockLongPressBack = false;
+    return;
+  }
+  startActivityForResult(std::move(options), [this](const ActivityResult&) {
+    sortBooks();
+    restoreSelector();
+    lockLongPressBack = false;
+    requestUpdate();
+  });
 }
 
 void LibraryActivity::loop() {
@@ -436,7 +505,11 @@ void LibraryActivity::loop() {
       mappedInput.rowTouch(row, contentTop, rowHeight + BookListItem::ROW_GAP, visibleRows, 0,
                            renderer.getScreenWidth(), rowHeight);
   if (touch != MappedInputManager::RowTouch::None) {
-    selectorIndex = static_cast<size_t>(pageStart + row);
+    const size_t touchedIndex = static_cast<size_t>(pageStart + row);
+    if (selectorIndex != touchedIndex) {
+      selectorIndex = touchedIndex;
+      viewState.dirty = true;
+    }
     if (touch == MappedInputManager::RowTouch::Tap) {
       onSelectBook(books[bookIndices[selectorIndex]].path);
     } else {
@@ -454,12 +527,14 @@ void LibraryActivity::loop() {
   if (swipe == MappedInputManager::SwipeDir::Up) {
     selectorIndex =
         ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), bookCount, BookListItem::ITEMS_PER_PAGE);
+    viewState.dirty = true;
     requestUpdate();
     return;
   }
   if (swipe == MappedInputManager::SwipeDir::Down) {
     selectorIndex =
         ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), bookCount, BookListItem::ITEMS_PER_PAGE);
+    viewState.dirty = true;
     requestUpdate();
     return;
   }
@@ -467,23 +542,27 @@ void LibraryActivity::loop() {
   bool navigationHandled = false;
   buttonNavigator.onNextRelease([this, bookCount, &navigationHandled] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), bookCount);
+    viewState.dirty = true;
     navigationHandled = true;
     requestUpdate();
   });
   buttonNavigator.onPreviousRelease([this, bookCount, &navigationHandled] {
     selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), bookCount);
+    viewState.dirty = true;
     navigationHandled = true;
     requestUpdate();
   });
   buttonNavigator.onNextContinuous([this, bookCount, &navigationHandled] {
     selectorIndex =
         ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), bookCount, BookListItem::ITEMS_PER_PAGE);
+    viewState.dirty = true;
     navigationHandled = true;
     requestUpdate();
   });
   buttonNavigator.onPreviousContinuous([this, bookCount, &navigationHandled] {
     selectorIndex =
         ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), bookCount, BookListItem::ITEMS_PER_PAGE);
+    viewState.dirty = true;
     navigationHandled = true;
     requestUpdate();
   });
@@ -500,7 +579,21 @@ void LibraryActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_LIBRARY));
+  std::vector<size_t> bookIndices;
+  char pageCounter[24] = {};
+  const char* headerSubtitle = nullptr;
+  if (!scanning) {
+    bookIndices = filteredBookIndices();
+    if (!bookIndices.empty()) {
+      const size_t pageCount = (bookIndices.size() + BookListItem::ITEMS_PER_PAGE - 1) / BookListItem::ITEMS_PER_PAGE;
+      const size_t currentPage = selectorIndex / BookListItem::ITEMS_PER_PAGE + 1;
+      snprintf(pageCounter, sizeof(pageCounter), "%u / %u", static_cast<unsigned>(currentPage),
+               static_cast<unsigned>(pageCount));
+      headerSubtitle = pageCounter;
+    }
+  }
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_LIBRARY),
+                 headerSubtitle);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
@@ -521,11 +614,11 @@ void LibraryActivity::render(RenderLock&&) {
           scannedBookCount, totalBookCount);
     }
   } else {
-    const auto bookIndices = filteredBookIndices();
     if (bookIndices.empty()) {
       UITheme::drawCenteredText(renderer, Rect{0, contentTop, pageWidth, contentHeight}, UI_12_FONT_ID,
                                 contentTop + contentHeight / 2,
-                                filters.isActive() ? tr(STR_NO_LIBRARY_FILTERED_BOOKS) : tr(STR_NO_LIBRARY_BOOKS));
+                                viewState.filtersActive() ? tr(STR_NO_LIBRARY_FILTERED_BOOKS)
+                                                          : tr(STR_NO_LIBRARY_BOOKS));
     } else {
       const int rowHeight = BookListItem::rowHeight(contentHeight);
       const int pageStart =

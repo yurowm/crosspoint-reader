@@ -1,26 +1,13 @@
 #pragma once
 
 #include <cstdint>
-#include <set>
 #include <string>
 #include <vector>
 
 #include "LibraryIndex.h"
+#include "LibraryViewState.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
-
-struct LibraryFilterState {
-  std::set<std::string> authors;
-  std::set<std::string> series;
-  std::set<std::string> tags;
-
-  bool isActive() const { return !authors.empty() || !series.empty() || !tags.empty(); }
-  void clear() {
-    authors.clear();
-    series.clear();
-    tags.clear();
-  }
-};
 
 class LibraryActivity final : public Activity {
   enum class CoverAttemptResult { None, Attempted, Updated };
@@ -30,7 +17,7 @@ class LibraryActivity final : public Activity {
   size_t selectorIndex = 0;
   size_t scannedBookCount = 0;
   size_t totalBookCount = 0;
-  LibraryFilterState filters;
+  LibraryViewState viewState;
   bool scanning = false;
   bool lockLongPressBack = false;
   bool lockNextConfirmRelease = false;
@@ -43,6 +30,9 @@ class LibraryActivity final : public Activity {
   void openFilters();
   std::vector<size_t> filteredBookIndices() const;
   bool matchesFilters(const LibraryBook& book) const;
+  void sortBooks();
+  void restoreSelector();
+  void rememberSelectedBook();
 
   static std::string filenameStem(const std::string& path);
   static bool readEpubProgress(const class Epub& epub, uint8_t& progressPercent);

@@ -63,12 +63,26 @@ ButtonHint endButtonHint(const MappedInputManager::NavigationAction action) {
       return {};
   }
 }
+
+const char* recommendationLabel(const NextBookFinder::Reason reason) {
+  switch (reason) {
+    case NextBookFinder::Reason::NextInSeries:
+      return tr(STR_EOB_NEXT_IN_SERIES);
+    case NextBookFinder::Reason::SameAuthor:
+      return tr(STR_EOB_SAME_AUTHOR);
+    case NextBookFinder::Reason::Unread:
+      return tr(STR_EOB_UNREAD_BOOK);
+    case NextBookFinder::Reason::None:
+      return tr(STR_EOB_CONTINUE_WITH);
+  }
+  return tr(STR_EOB_CONTINUE_WITH);
+}
 }  // namespace
 
 void EndOfBookOptions::loadOnce(const std::string& currentBookPath) {
   if (isLoaded.load(std::memory_order_acquire)) return;
 
-  hasRecommendation = NextBookFinder::findRecommendedBook(currentBookPath, recommendation);
+  hasRecommendation = NextBookFinder::findRecommendedBook(currentBookPath, recommendation, recommendationReason);
   selector = 0;
   if (hasRecommendation) ensureRecommendationCover();
   isLoaded.store(true, std::memory_order_release);
@@ -169,7 +183,7 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_END_OF_BOOK));
   const EndOfBookLayout layout = calculateLayout(renderer);
   UITheme::drawCenteredText(renderer, Rect{0, layout.subtitleY, pageWidth, renderer.getLineHeight(UI_10_FONT_ID)},
-                            UI_10_FONT_ID, layout.subtitleY, tr(STR_EOB_CONTINUE_WITH));
+                            UI_10_FONT_ID, layout.subtitleY, recommendationLabel(recommendationReason));
   BookListItem::draw(renderer, recommendation, layout.card.x, layout.card.y, layout.card.width, layout.card.height,
                      selector == 0);
 

@@ -279,11 +279,23 @@ bool MappedInputManager::wasHomeGesture() const { return wasBottomEdgeUpSwipe();
 
 bool MappedInputManager::wasPressed(const Button button) const {
   if (button == Button::Back && wasBackGesture()) return true;
+  // A short Power action is known only when the physical button is released.
+  // Publish a complete logical click in that frame: some activities activate
+  // Confirm on press, while others activate on release. isPressed() remains
+  // physical-only, so holding Power can never trigger a long-Confirm action.
+  if (button == Button::Confirm && SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::CONFIRM &&
+      mapButton(Button::Power, &HalGPIO::wasReleased)) {
+    return true;
+  }
   return mapButton(button, &HalGPIO::wasPressed);
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
   if (button == Button::Back && wasBackGesture()) return true;
+  if (button == Button::Confirm && SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::CONFIRM &&
+      mapButton(Button::Power, &HalGPIO::wasReleased)) {
+    return true;
+  }
   return mapButton(button, &HalGPIO::wasReleased);
 }
 
