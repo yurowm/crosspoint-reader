@@ -6,6 +6,7 @@
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <SdCardFont.h>
 #include <Utf8.h>
 
@@ -1381,55 +1382,48 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 }
 
 void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
-                                 const int maxHeight) const {
-  float scale = 1.0f;
-  bool isScaled = false;
-  if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
-    scale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
-    isScaled = true;
-  }
-  if (maxHeight > 0 && bitmap.getHeight() > maxHeight) {
-    scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));
-    isScaled = true;
-  }
+                                 const int maxHeight, const bool allowUpscale) const {
+  float scale = allowUpscale ? 2.0f : 1.0f;
+  if (maxWidth > 0) scale = std::min(scale, static_cast<float>(maxWidth) / bitmap.getWidth());
+  if (maxHeight > 0) scale = std::min(scale, static_cast<float>(maxHeight) / bitmap.getHeight());
+  if (maxWidth <= 0 && maxHeight <= 0) scale = 1.0f;
+  const bool isScaled = scale != 1.0f;
+  const bool isUpscaled = scale > 1.0f;
 
   // For 1-bit BMP, output is still 2-bit packed (for consistency with readNextRow)
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
-  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
-  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+  auto outputRow = makeUniqueNoThrow<uint8_t[]>(outputRowSize);
+  auto rowBytes = makeUniqueNoThrow<uint8_t[]>(bitmap.getRowBytes());
 
   if (!outputRow || !rowBytes) {
-    LOG_ERR("GFX", "!! Failed to allocate 1-bit BMP row buffers");
-    free(outputRow);
-    free(rowBytes);
+    LOG_ERR("GFX", "OOM: 1-bit BMP row buffers");
     return;
   }
 
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // Read rows sequentially using readNextRow
-    if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
+    if (bitmap.readNextRow(outputRow.get(), rowBytes.get()) != BmpReaderError::Ok) {
       LOG_ERR("GFX", "Failed to read row %d from 1-bit bitmap", bmpY);
-      free(outputRow);
-      free(rowBytes);
       return;
     }
 
     // Calculate screen Y based on whether BMP is top-down or bottom-up
     const int bmpYOffset = bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
-    int screenY = y + (isScaled ? static_cast<int>(std::floor(bmpYOffset * scale)) : bmpYOffset);
-    if (screenY >= getScreenHeight()) {
+    const int screenY = y + (isScaled ? static_cast<int>(std::floor(bmpYOffset * scale)) : bmpYOffset);
+    const int screenYEnd =
+        isUpscaled ? y + static_cast<int>(std::floor((bmpYOffset + 1) * scale)) : screenY + 1;
+    if (screenY >= getScreenHeight() || screenYEnd <= 0) {
       continue;  // Continue reading to keep row counter in sync
-    }
-    if (screenY < 0) {
-      continue;
     }
 
     for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
-      int screenX = x + (isScaled ? static_cast<int>(std::floor(bmpX * scale)) : bmpX);
+      const int screenX = x + (isScaled ? static_cast<int>(std::floor(bmpX * scale)) : bmpX);
+      const int screenXEnd =
+          isUpscaled ? x + static_cast<int>(std::floor((bmpX + 1) * scale)) : screenX + 1;
       if (screenX >= getScreenWidth()) {
         break;
       }
-      if (screenX < 0) {
+      if (screenXEnd <= 0) {
         continue;
       }
 
@@ -1439,19 +1433,24 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
       // For 1-bit source: 0 or 1 -> map to black (0,1,2) or white (3)
       // val < 3 means black pixel (draw it)
       if (val < 3) {
-        drawPixel(screenX, screenY, true);
+        for (int drawY = std::max(0, screenY); drawY < std::min(getScreenHeight(), screenYEnd); drawY++) {
+          for (int drawX = std::max(0, screenX); drawX < std::min(getScreenWidth(), screenXEnd); drawX++) {
+            drawPixel(drawX, drawY, true);
+          }
+        }
       }
       // White pixels (val == 3) are not drawn (leave background)
     }
   }
 
-  free(outputRow);
-  free(rowBytes);
-
-  const int renderedWidth =
-      isScaled ? static_cast<int>(std::floor((bitmap.getWidth() - 1) * scale)) + 1 : bitmap.getWidth();
-  const int renderedHeight =
-      isScaled ? static_cast<int>(std::floor((bitmap.getHeight() - 1) * scale)) + 1 : bitmap.getHeight();
+  const int renderedWidth = isUpscaled
+                                ? static_cast<int>(std::floor(bitmap.getWidth() * scale))
+                                : isScaled ? static_cast<int>(std::floor((bitmap.getWidth() - 1) * scale)) + 1
+                                           : bitmap.getWidth();
+  const int renderedHeight = isUpscaled
+                                 ? static_cast<int>(std::floor(bitmap.getHeight() * scale))
+                                 : isScaled ? static_cast<int>(std::floor((bitmap.getHeight() - 1) * scale)) + 1
+                                            : bitmap.getHeight();
   preserveImagePolarity(x, y, renderedWidth, renderedHeight);
 }
 

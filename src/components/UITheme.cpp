@@ -6,6 +6,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cstring>
 #include <memory>
 
 #include "MappedInputManager.h"
@@ -122,9 +123,27 @@ Rect UITheme::getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButton
 }
 
 std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight) {
-  size_t pos = coverBmpPath.find("[HEIGHT]", 0);
+  constexpr const char* THUMB_PREFIX = "/thumb_";
+  constexpr const char* GRAYSCALE_MARKER = "2bpp_";
+  const size_t thumbPos = coverBmpPath.rfind(THUMB_PREFIX);
+  if (thumbPos == std::string::npos) return coverBmpPath;
+
+  const size_t heightStart = thumbPos + strlen(THUMB_PREFIX);
+  if (coverBmpPath.compare(heightStart, strlen(GRAYSCALE_MARKER), GRAYSCALE_MARKER) == 0) {
+    coverBmpPath.erase(heightStart, strlen(GRAYSCALE_MARKER));
+  }
+
+  size_t pos = coverBmpPath.find("[HEIGHT]");
   if (pos != std::string::npos) {
     coverBmpPath.replace(pos, 8, std::to_string(coverHeight));
+    return coverBmpPath;
+  }
+
+  const size_t numericHeightStart = thumbPos + strlen(THUMB_PREFIX);
+  const size_t extensionPos = coverBmpPath.find(".bmp", numericHeightStart);
+  if (extensionPos != std::string::npos && extensionPos > numericHeightStart &&
+      coverBmpPath.find_first_not_of("0123456789", numericHeightStart) == extensionPos) {
+    coverBmpPath.replace(numericHeightStart, extensionPos - numericHeightStart, std::to_string(coverHeight));
   }
   return coverBmpPath;
 }
