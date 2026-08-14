@@ -1,6 +1,5 @@
 #include "HomeActivity.h"
 
-#include <Bitmap.h>
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -90,6 +89,7 @@ ButtonHint homeButtonHint(const MappedInputManager::NavigationAction action) {
       return {};
   }
 }
+
 }  // namespace
 
 int HomeActivity::getMenuItemCount() const {
@@ -402,7 +402,6 @@ void HomeActivity::render(RenderLock&&) {
   const auto actions = mappedInput.mapNavigationActions();
   GUI.drawIconButtonHints(renderer, homeButtonHint(actions.btn1), homeButtonHint(actions.btn2),
                           homeButtonHint(actions.btn3), homeButtonHint(actions.btn4));
-
   renderer.displayBuffer();
 
   if (!firstRenderDone) {

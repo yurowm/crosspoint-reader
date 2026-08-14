@@ -19,6 +19,7 @@
 // Internal constants
 namespace {
 constexpr int hPaddingInSelection = 8;
+constexpr int homeCoverSidePadding = 8;
 constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
 constexpr int maxListValueWidth = 200;
@@ -401,6 +402,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   }
 
   const RecentBook& book = recentBooks.front();
+  const int coverX = rect.x + homeCoverSidePadding;
   const int coverHeight = rect.height;
   int localCoverWidth = std::max(1, coverHeight * 2 / 3);
   bool hasCover = false;
@@ -413,8 +415,8 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       if (bitmap.parseHeaders() == BmpReaderError::Ok && bitmap.getWidth() > 0 && bitmap.getHeight() > 0) {
         localCoverWidth =
             std::max(1, static_cast<int>(bitmap.getWidth() * static_cast<float>(coverHeight) / bitmap.getHeight()));
-        localCoverWidth = std::min(localCoverWidth, rect.width * 2 / 3);
-        renderer.drawBitmap(bitmap, rect.x, rect.y, localCoverWidth, coverHeight);
+        localCoverWidth = std::min(localCoverWidth, std::max(1, rect.width * 2 / 3 - homeCoverSidePadding));
+        renderer.drawBitmap(bitmap, coverX, rect.y, localCoverWidth, coverHeight);
         hasCover = true;
       }
       file.close();
@@ -423,8 +425,8 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 
   if (!coverRendered) {
     if (!hasCover) {
-      renderer.fillRect(rect.x, rect.y + coverHeight / 3, localCoverWidth, coverHeight * 2 / 3, true);
-      renderer.drawIcon(CoverIcon, rect.x + 24, rect.y + 24, 32);
+      renderer.fillRect(coverX, rect.y + coverHeight / 3, localCoverWidth, coverHeight * 2 / 3, true);
+      renderer.drawIcon(CoverIcon, coverX + 24, rect.y + 24, 32);
     }
     coverWidth = localCoverWidth;
     coverBufferStored = storeCoverBuffer();
@@ -433,7 +435,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 
   // The cached cover width is needed after the cover bitmap is restored from
   // the framebuffer, when there is no SD-card read to recalculate it.
-  const int textX = rect.x + coverWidth + 14;
+  const int textX = coverX + coverWidth + 14;
   const int textRight = rect.x + rect.width - LyraMetrics::values.contentSidePadding;
   const int textWidth = std::max(1, textRight - textX);
   const int titleY = rect.y + 7;
