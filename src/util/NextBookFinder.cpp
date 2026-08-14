@@ -6,80 +6,133 @@
 #include <Memory.h>
 
 #include <algorithm>
-#include <string_view>
-
-#include "CrossPointSettings.h"
+#include <cstdlib>
 
 namespace {
-constexpr size_t NAME_BUFFER_SIZE = 500;
+enum class RecommendationTier : uint8_t { Series, Author, Any, None };
 
-bool isSupportedBookFile(const std::string_view name) {
-  // Formats ReaderActivity can open (bmp is a viewer, not a book, so it is excluded)
-  return FsHelpers::hasEpubExtension(name) || FsHelpers::hasXtcExtension(name) || FsHelpers::hasTxtExtension(name) ||
-         FsHelpers::hasMarkdownExtension(name);
+struct FindCurrentContext {
+  const std::string* path;
+  LibraryBook* current;
+  bool found = false;
+};
+
+struct RecommendationContext {
+  const std::string* currentPath;
+  const LibraryBook* current;
+  LibraryBook* best;
+  RecommendationTier bestTier = RecommendationTier::None;
+  bool currentSeriesIndexNumeric = false;
+  double currentSeriesIndex = 0.0;
+  bool bestSeriesIndexNumeric = false;
+  double bestSeriesIndex = 0.0;
+};
+
+bool parseSeriesIndex(const std::string& value, double& result) {
+  if (value.empty()) return false;
+  char* end = nullptr;
+  result = std::strtod(value.c_str(), &end);
+  return end != value.c_str() && *end == '\0';
+}
+
+bool sameAuthor(const LibraryBook& left, const LibraryBook& right) {
+  const auto matches = [](const std::string& value, const LibraryBook& book) {
+    if (value.empty()) return false;
+    if (book.author == value) return true;
+    return std::find(book.authors.begin(), book.authors.end(), value) != book.authors.end();
+  };
+
+  if (matches(left.author, right)) return true;
+  return std::any_of(left.authors.begin(), left.authors.end(),
+                     [&right, &matches](const std::string& author) { return matches(author, right); });
+}
+
+bool bookOrderLess(const LibraryBook& left, const LibraryBook& right) {
+  if (left.title == right.title) return FsHelpers::naturalLess(left.path, right.path);
+  return FsHelpers::naturalLess(left.title, right.title);
+}
+
+bool seriesOrderLess(const LibraryBook& candidate, const bool candidateNumeric, const double candidateIndex,
+                     const LibraryBook& best, const bool bestNumeric, const double bestIndex) {
+  if (candidateNumeric != bestNumeric) return candidateNumeric;
+  if (candidateNumeric && candidateIndex != bestIndex) return candidateIndex < bestIndex;
+  if (candidate.seriesIndex != best.seriesIndex) {
+    if (candidate.seriesIndex.empty()) return false;
+    if (best.seriesIndex.empty()) return true;
+    return FsHelpers::naturalLess(candidate.seriesIndex, best.seriesIndex);
+  }
+  return bookOrderLess(candidate, best);
+}
+
+bool findCurrent(const LibraryBook& book, void* rawContext) {
+  auto* context = static_cast<FindCurrentContext*>(rawContext);
+  if (book.path != *context->path) return true;
+  *context->current = book;
+  context->found = true;
+  return false;
+}
+
+bool considerBook(const LibraryBook& book, void* rawContext) {
+  auto* context = static_cast<RecommendationContext*>(rawContext);
+  if (book.path == *context->currentPath || book.progressPercent >= 100 || !Storage.exists(book.path.c_str())) {
+    return true;
+  }
+
+  RecommendationTier tier = RecommendationTier::Any;
+  bool candidateSeriesIndexNumeric = false;
+  double candidateSeriesIndex = 0.0;
+  const bool sameSeries = !context->current->series.empty() && book.series == context->current->series;
+  if (sameSeries) {
+    candidateSeriesIndexNumeric = parseSeriesIndex(book.seriesIndex, candidateSeriesIndex);
+    const bool isNext = context->currentSeriesIndexNumeric
+                          ? candidateSeriesIndexNumeric && candidateSeriesIndex > context->currentSeriesIndex
+                          : book.seriesIndex != context->current->seriesIndex;
+    if (isNext) tier = RecommendationTier::Series;
+  }
+  if (tier != RecommendationTier::Series && sameAuthor(*context->current, book)) {
+    tier = RecommendationTier::Author;
+  }
+
+  bool replace = tier < context->bestTier;
+  if (tier == context->bestTier) {
+    replace = tier == RecommendationTier::Series
+                ? seriesOrderLess(book, candidateSeriesIndexNumeric, candidateSeriesIndex, *context->best,
+                                  context->bestSeriesIndexNumeric, context->bestSeriesIndex)
+                : bookOrderLess(book, *context->best);
+  }
+  if (!replace) return true;
+
+  *context->best = book;
+  context->bestTier = tier;
+  context->bestSeriesIndexNumeric = candidateSeriesIndexNumeric;
+  context->bestSeriesIndex = candidateSeriesIndex;
+  return true;
 }
 }  // namespace
 
-std::vector<std::string> NextBookFinder::findNextBooks(const std::string& currentBookPath, const size_t maxCount) {
-  std::vector<std::string> result;
-  if (maxCount == 0 || currentBookPath.empty()) {
-    return result;
+bool NextBookFinder::findRecommendedBook(const std::string& currentBookPath, LibraryBook& recommendation) {
+  if (currentBookPath.empty()) return false;
+
+  auto current = makeUniqueNoThrow<LibraryBook>();
+  if (!current) {
+    LOG_ERR("NBF", "OOM: current LibraryBook");
+    return false;
   }
 
-  const std::string folder = FsHelpers::extractFolderPath(currentBookPath);
-  const auto lastSlash = currentBookPath.find_last_of('/');
-  const std::string currentName =
-      lastSlash == std::string::npos ? currentBookPath : currentBookPath.substr(lastSlash + 1);
-
-  auto dir = Storage.open(folder.c_str());
-  if (!dir || !dir.isDirectory()) {
-    LOG_ERR("NBF", "Cannot open folder: %s", folder.c_str());
-    return result;
-  }
-  dir.rewindDirectory();
-
-  const auto nameBuffer = makeUniqueNoThrow<char[]>(NAME_BUFFER_SIZE);
-  if (!nameBuffer) {
-    LOG_ERR("NBF", "OOM: %d bytes", static_cast<int>(NAME_BUFFER_SIZE));
-    dir.close();
-    return result;
+  FindCurrentContext findContext{&currentBookPath, current.get()};
+  if (!LibraryIndex::visitBooks(&findCurrent, &findContext)) return false;
+  if (!findContext.found) {
+    LOG_DBG("NBF", "Current book is missing from library index: %s", currentBookPath.c_str());
+    return false;
   }
 
-  // Heap use is bounded: at most maxCount+1 short filename strings live at once (the
-  // file browser holds a whole folder in the same std::string form). A failed
-  // allocation here would abort like any STL growth in this codebase; the reserve
-  // below makes vector growth a single up-front allocation.
-  result.reserve(maxCount + 1);
-  const auto less = [](const std::string& a, const std::string& b) { return FsHelpers::naturalLess(a, b); };
+  RecommendationContext recommendationContext{&currentBookPath, current.get(), &recommendation};
+  recommendationContext.currentSeriesIndexNumeric =
+      parseSeriesIndex(current->seriesIndex, recommendationContext.currentSeriesIndex);
+  if (!LibraryIndex::visitBooks(&considerBook, &recommendationContext)) return false;
 
-  for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
-    if (file.isDirectory()) {
-      continue;
-    }
-    file.getName(nameBuffer.get(), NAME_BUFFER_SIZE);
-    if (!SETTINGS.showHiddenFiles && nameBuffer[0] == '.') {
-      continue;
-    }
-    if (!isSupportedBookFile(nameBuffer.get())) {
-      continue;
-    }
-    std::string name{nameBuffer.get()};
-    // Keep only files ordering strictly after the current one; equal names (the book
-    // itself, or a case-variant of it) compare "not less" both ways and drop out here.
-    if (!FsHelpers::naturalLess(currentName, name)) {
-      continue;
-    }
-    // Bounded insertion sort: keep the maxCount lowest-ordering candidates
-    if (result.size() >= maxCount && !less(name, result.back())) {
-      continue;
-    }
-    const auto pos = std::lower_bound(result.begin(), result.end(), name, less);
-    result.insert(pos, std::move(name));
-    if (result.size() > maxCount) {
-      result.pop_back();
-    }
-  }
-  dir.close();
-
-  return result;
+  if (recommendationContext.bestTier == RecommendationTier::None) return false;
+  LOG_DBG("NBF", "Recommended %s (tier %u)", recommendation.path.c_str(),
+          static_cast<unsigned>(recommendationContext.bestTier));
+  return true;
 }

@@ -1,15 +1,15 @@
 #pragma once
 
 #include <string>
-#include <vector>
+
+#include "LibraryIndex.h"
 
 namespace NextBookFinder {
 
-// Collects up to maxCount book files that order after currentBookPath's filename
-// (natural sort, same ordering as the file browser) within the same folder.
-// Returns bare filenames in sorted order; the current file itself is excluded.
-// Single directory pass keeping only the maxCount best matches, so memory stays
-// bounded regardless of folder size.
-std::vector<std::string> findNextBooks(const std::string& currentBookPath, size_t maxCount);
+// Selects one unread book from the persistent library index. Priority is the
+// next numbered book in the same series, then the same author, then any unread
+// book. The index is streamed, so only the current book and best candidate are
+// retained in memory.
+bool findRecommendedBook(const std::string& currentBookPath, LibraryBook& recommendation);
 
 }  // namespace NextBookFinder
