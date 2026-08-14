@@ -27,6 +27,8 @@ constexpr int DIRECTORY_STACK_RESERVE = 16;
 constexpr int FILE_NAME_BUFFER_SIZE = 500;
 constexpr size_t SCAN_PROGRESS_UPDATES = 10;
 constexpr unsigned long FILTER_HOLD_MS = 1000;
+constexpr unsigned long NAVIGATION_REPEAT_START_MS = 500;
+constexpr unsigned long NAVIGATION_REPEAT_INTERVAL_MS = 500;
 
 bool isBookFile(const std::string& path) {
   return FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path) || FsHelpers::hasTxtExtension(path) ||
@@ -55,9 +57,9 @@ ButtonHint libraryButtonHint(const MappedInputManager::NavigationAction action) 
     case MappedInputManager::NavigationAction::Confirm:
       return {.icon = Check};
     case MappedInputManager::NavigationAction::Previous:
-      return {.icon = ChevronUp};
+      return {.icon = ChevronLeft};
     case MappedInputManager::NavigationAction::Next:
-      return {.icon = ChevronDown};
+      return {.icon = ChevronRight};
     default:
       return {};
   }
@@ -452,6 +454,19 @@ void LibraryActivity::rememberSelectedBook() {
   viewState.dirty = true;
 }
 
+void LibraryActivity::moveSelection(const int bookCount, const bool next, const bool byPage) {
+  const int currentIndex = static_cast<int>(selectorIndex);
+  if (byPage) {
+    selectorIndex = next ? ButtonNavigator::nextPageIndex(currentIndex, bookCount, BookListItem::ITEMS_PER_PAGE)
+                         : ButtonNavigator::previousPageIndex(currentIndex, bookCount, BookListItem::ITEMS_PER_PAGE);
+  } else {
+    selectorIndex = next ? ButtonNavigator::nextIndex(currentIndex, bookCount)
+                         : ButtonNavigator::previousIndex(currentIndex, bookCount);
+  }
+  viewState.dirty = true;
+  requestUpdate();
+}
+
 void LibraryActivity::openFilters() {
   rememberSelectedBook();
   lockLongPressBack = true;
@@ -539,34 +554,40 @@ void LibraryActivity::loop() {
     return;
   }
 
-  bool navigationHandled = false;
-  buttonNavigator.onNextRelease([this, bookCount, &navigationHandled] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), bookCount);
-    viewState.dirty = true;
-    navigationHandled = true;
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousRelease([this, bookCount, &navigationHandled] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), bookCount);
-    viewState.dirty = true;
-    navigationHandled = true;
-    requestUpdate();
-  });
-  buttonNavigator.onNextContinuous([this, bookCount, &navigationHandled] {
-    selectorIndex =
-        ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), bookCount, BookListItem::ITEMS_PER_PAGE);
-    viewState.dirty = true;
-    navigationHandled = true;
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousContinuous([this, bookCount, &navigationHandled] {
-    selectorIndex =
-        ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), bookCount, BookListItem::ITEMS_PER_PAGE);
-    viewState.dirty = true;
-    navigationHandled = true;
-    requestUpdate();
-  });
-  if (navigationHandled) return;
+  const auto handleRelease = [this, bookCount](const MappedInputManager::Button button, const bool next,
+                                                const bool byPage) {
+    if (!mappedInput.wasReleased(button)) return false;
+    if (!navigationRepeated) moveSelection(bookCount, next, byPage);
+    navigationRepeated = false;
+    lastNavigationRepeatTime = 0;
+    return true;
+  };
+
+  if (handleRelease(MappedInputManager::Button::Down, true, false) ||
+      handleRelease(MappedInputManager::Button::Up, false, false) ||
+      handleRelease(MappedInputManager::Button::Right, true, true) ||
+      handleRelease(MappedInputManager::Button::Left, false, true)) {
+    return;
+  }
+
+  const unsigned long now = millis();
+  if (mappedInput.getHeldTime() > NAVIGATION_REPEAT_START_MS &&
+      now - lastNavigationRepeatTime > NAVIGATION_REPEAT_INTERVAL_MS) {
+    if (mappedInput.isPressed(MappedInputManager::Button::Down) ||
+        mappedInput.isPressed(MappedInputManager::Button::Right)) {
+      navigationRepeated = true;
+      lastNavigationRepeatTime = now;
+      moveSelection(bookCount, true, true);
+      return;
+    }
+    if (mappedInput.isPressed(MappedInputManager::Button::Up) ||
+        mappedInput.isPressed(MappedInputManager::Button::Left)) {
+      navigationRepeated = true;
+      lastNavigationRepeatTime = now;
+      moveSelection(bookCount, false, true);
+      return;
+    }
+  }
 
   if (ensureNextVisibleCover() != CoverAttemptResult::None) {
     requestUpdate();

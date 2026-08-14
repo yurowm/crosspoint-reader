@@ -12,16 +12,17 @@
 class LibraryActivity final : public Activity {
   enum class CoverAttemptResult { None, Attempted, Updated };
 
-  ButtonNavigator buttonNavigator;
   std::vector<LibraryBook> books;
   size_t selectorIndex = 0;
   size_t scannedBookCount = 0;
   size_t totalBookCount = 0;
+  uint32_t lastNavigationRepeatTime = 0;
   LibraryViewState viewState;
   bool scanning = false;
   bool lockLongPressBack = false;
   bool lockNextConfirmRelease = false;
   bool indexDirty = false;
+  bool navigationRepeated = false;
 
   bool scanLibrary(bool indexLoaded);
   bool scanDirectory(const std::string& path, std::vector<LibraryFileInfo>& bookFiles);
@@ -33,6 +34,7 @@ class LibraryActivity final : public Activity {
   void sortBooks();
   void restoreSelector();
   void rememberSelectedBook();
+  void moveSelection(int bookCount, bool next, bool byPage);
 
   static std::string filenameStem(const std::string& path);
   static bool readEpubProgress(const class Epub& epub, uint8_t& progressPercent);
