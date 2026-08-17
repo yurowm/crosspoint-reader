@@ -247,8 +247,9 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
 
   int clearY;
   int paddingBottom = 0;
+  const int contentGap = UITheme::getInstance().getMetrics().readerStatusBarGap;
   if (position == StatusBarOverlayPosition::Bottom) {
-    clearY = renderer.getScreenHeight() - orientedMarginBottom - statusBarHeight - 4;
+    clearY = renderer.getScreenHeight() - orientedMarginBottom - statusBarHeight - contentGap - 4;
     if (clearY < 0) {
       clearY = 0;
     }
@@ -258,7 +259,7 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
   }
   const int clearHeight = position == StatusBarOverlayPosition::Bottom
                               ? renderer.getScreenHeight() - orientedMarginBottom - clearY
-                              : statusBarHeight + 4;
+                              : statusBarHeight + contentGap + 4;
   if (clearHeight > 0) {
     renderer.fillRect(0, clearY, renderer.getScreenWidth(), clearHeight, false);
   }

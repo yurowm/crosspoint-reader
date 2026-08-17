@@ -85,6 +85,7 @@ struct ThemeMetrics {
   int progressBarMarginTop;
   int statusBarHorizontalMargin;
   int statusBarVerticalMargin;
+  int readerStatusBarGap;
   int keyboardKeyHeight;
   int keyboardKeySpacing;
   bool keyboardCenteredText;
@@ -215,6 +216,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .progressBarMarginTop = 1,
                                  .statusBarHorizontalMargin = 5,
                                  .statusBarVerticalMargin = 19,
+                                 .readerStatusBarGap = 2,
                                  .keyboardKeyHeight = 48,
                                  .keyboardKeySpacing = 0,
                                  .keyboardCenteredText = false,

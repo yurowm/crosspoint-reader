@@ -109,8 +109,10 @@ void TxtReaderActivity::initializeReader() {
   cachedOrientedMarginTop += cachedScreenMargin;
   cachedOrientedMarginLeft += cachedScreenMargin;
   cachedOrientedMarginRight += cachedScreenMargin;
-  cachedOrientedMarginBottom +=
-      std::max(cachedScreenMargin, static_cast<uint8_t>(UITheme::getInstance().getStatusBarHeight()));
+  const int statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  const int statusBarReservation =
+      statusBarHeight > 0 ? statusBarHeight + UITheme::getInstance().getMetrics().readerStatusBarGap : 0;
+  cachedOrientedMarginBottom += std::max<int>(cachedScreenMargin, statusBarReservation);
 
   viewportWidth = renderer.getScreenWidth() - cachedOrientedMarginLeft - cachedOrientedMarginRight;
   const int viewportHeight = renderer.getScreenHeight() - cachedOrientedMarginTop - cachedOrientedMarginBottom;

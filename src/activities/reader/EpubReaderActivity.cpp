@@ -1229,15 +1229,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   orientedMarginRight += SETTINGS.screenMargin;
 
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  const auto& metrics = UITheme::getInstance().getMetrics();
 
   // reserves space for automatic page turn indicator when no status bar or progress bar only
   if (automaticPageTurnActive &&
       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
-    orientedMarginBottom +=
-        std::max(SETTINGS.screenMargin,
-                 static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
+    orientedMarginBottom += std::max<int>(
+        SETTINGS.screenMargin, statusBarHeight + metrics.statusBarVerticalMargin + metrics.readerStatusBarGap);
   } else {
-    orientedMarginBottom += std::max(SETTINGS.screenMargin, statusBarHeight);
+    const int statusBarReservation = statusBarHeight > 0 ? statusBarHeight + metrics.readerStatusBarGap : 0;
+    orientedMarginBottom += std::max<int>(SETTINGS.screenMargin, statusBarReservation);
   }
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
