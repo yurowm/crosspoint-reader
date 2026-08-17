@@ -51,12 +51,19 @@ bool readEpubProgress(const Epub& epub, uint8_t& progressPercent) {
     return false;
   }
 
-  const int spineIndex = std::clamp<int>(readLe16(data.data()), 0, epub.getSpineItemsCount() - 1);
+  const int spineCount = epub.getSpineItemsCount();
+  const int savedSpineIndex = readLe16(data.data());
   const int currentPage = readLe16(data.data() + 2);
   const int pageCount = readLe16(data.data() + 4);
+  if (savedSpineIndex >= spineCount) {
+    progressPercent = 100;
+    return true;
+  }
+
+  const int spineIndex = std::clamp(savedSpineIndex, 0, spineCount - 1);
   const float chapterProgress = pageCount > 0 ? static_cast<float>(currentPage) / pageCount : 0.0f;
   const int percent = static_cast<int>(epub.calculateProgress(spineIndex, chapterProgress) * 100.0f + 0.5f);
-  progressPercent = static_cast<uint8_t>(std::clamp(percent, 0, 100));
+  progressPercent = static_cast<uint8_t>(std::clamp(percent, 0, 99));
   return true;
 }
 
@@ -93,7 +100,7 @@ ButtonHint homeButtonHint(const MappedInputManager::NavigationAction action) {
 }  // namespace
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // Library, Recents, File transfer, Settings
+  int count = 4;  // Library, Deferred, File transfer, Settings
   if (!recentBooks.empty()) {
     count++;  // Continue Reading
   }
@@ -284,8 +291,8 @@ void HomeActivity::loop() {
       case HomeMenuItem::LIBRARY:
         onLibraryOpen();
         break;
-      case HomeMenuItem::RECENTS:
-        onRecentsOpen();
+      case HomeMenuItem::DEFERRED:
+        onDeferredOpen();
         break;
       case HomeMenuItem::OPDS_BROWSER:
         onOpdsBrowserOpen();
@@ -376,9 +383,9 @@ void HomeActivity::render(RenderLock&&) {
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_LIBRARY), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
+  std::vector<const char*> menuItems = {tr(STR_LIBRARY), tr(STR_DEFERRED_BOOKS), tr(STR_FILE_TRANSFER),
                                         tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Library, Recent, Transfer, Settings};
+  std::vector<UIIcon> menuIcons = {Library, Deferred, Transfer, Settings};
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
@@ -417,7 +424,7 @@ void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToR
 
 void HomeActivity::onLibraryOpen() { activityManager.goToLibrary(); }
 
-void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
+void HomeActivity::onDeferredOpen() { activityManager.goToDeferredBooks(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 

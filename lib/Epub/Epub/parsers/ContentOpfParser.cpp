@@ -37,6 +37,19 @@ std::string trimMetadataText(const std::string& value) {
       std::find_if_not(value.rbegin(), value.rend(), [](unsigned char c) { return std::isspace(c); }).base();
   return first < last ? std::string(first, last) : std::string();
 }
+
+std::string extractPublicationYear(const std::string& value) {
+  const std::string trimmed = trimMetadataText(value);
+  for (size_t i = 0; i + 4 <= trimmed.size(); ++i) {
+    if (std::isdigit(static_cast<unsigned char>(trimmed[i])) &&
+        std::isdigit(static_cast<unsigned char>(trimmed[i + 1])) &&
+        std::isdigit(static_cast<unsigned char>(trimmed[i + 2])) &&
+        std::isdigit(static_cast<unsigned char>(trimmed[i + 3]))) {
+      return trimmed.substr(i, 4);
+    }
+  }
+  return {};
+}
 }  // namespace
 
 bool ContentOpfParser::setup() {
@@ -129,6 +142,11 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_METADATA && strcmp(name, "dc:subject") == 0) {
     self->currentSubject.clear();
     self->state = IN_BOOK_SUBJECT;
+    return;
+  }
+
+  if (self->state == IN_METADATA && strcmp(name, "dc:date") == 0 && self->year.empty()) {
+    self->state = IN_BOOK_DATE;
     return;
   }
 
@@ -380,6 +398,11 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     return;
   }
 
+  if (self->state == IN_BOOK_DATE) {
+    self->year.append(s, len);
+    return;
+  }
+
   if (self->state == IN_BOOK_LANGUAGE) {
     self->language.append(s, len);
     return;
@@ -431,6 +454,12 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
     if (!subject.empty()) {
       self->subjects.push_back(subject);
     }
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_DATE && strcmp(name, "dc:date") == 0) {
+    self->year = extractPublicationYear(self->year);
     self->state = IN_METADATA;
     return;
   }

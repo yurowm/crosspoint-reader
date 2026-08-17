@@ -22,6 +22,7 @@
 #include "components/icons/book.h"
 #include "components/icons/book24.h"
 #include "components/icons/bookmark.h"
+#include "components/icons/checkCheck20.h"
 #include "components/icons/file24.h"
 #include "components/icons/folder.h"
 #include "components/icons/folder24.h"
@@ -65,6 +66,8 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return icon_menu_library_20.bits;
       case Recent:
         return icon_recent_20.bits;
+      case Deferred:
+        return icon_deferred_20.bits;
       case Transfer:
         return icon_transfer_20.bits;
       case Settings:
@@ -75,6 +78,8 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return icon_chevron_down_20.bits;
       case Check:
         return icon_check_20.bits;
+      case CheckCheck:
+        return CheckCheck20Icon;
       case House:
         return icon_house_20.bits;
       case Filters:
@@ -101,6 +106,16 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return icon_chevron_left_20.bits;
       case ChevronRight:
         return icon_chevron_right_20.bits;
+      case ReadBook:
+        return icon_read_book_20.bits;
+      case DeferredOff:
+        return icon_deferred_off_20.bits;
+      case MarkRead:
+        return icon_mark_read_20.bits;
+      case MarkUnread:
+        return icon_mark_unread_20.bits;
+      case BookCover:
+        return icon_book_cover_20.bits;
       default:
         return nullptr;
     }
@@ -124,6 +139,8 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return icon_menu_library_24.bits;
       case Recent:
         return icon_recent_24.bits;
+      case Deferred:
+        return icon_deferred_24.bits;
       case Transfer:
         return icon_transfer_24.bits;
       case Settings:
@@ -160,6 +177,16 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return icon_chevron_left_24.bits;
       case ChevronRight:
         return icon_chevron_right_24.bits;
+      case ReadBook:
+        return icon_read_book_24.bits;
+      case DeferredOff:
+        return icon_deferred_off_24.bits;
+      case MarkRead:
+        return icon_mark_read_24.bits;
+      case MarkUnread:
+        return icon_mark_unread_24.bits;
+      case BookCover:
+        return icon_book_cover_24.bits;
       default:
         return nullptr;
     }
@@ -183,6 +210,8 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return icon_menu_library_32.bits;
       case Recent:
         return icon_recent_32.bits;
+      case Deferred:
+        return icon_deferred_32.bits;
       case Transfer:
         return icon_transfer_32.bits;
       case Settings:
@@ -219,6 +248,16 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return icon_chevron_left_32.bits;
       case ChevronRight:
         return icon_chevron_right_32.bits;
+      case ReadBook:
+        return icon_read_book_32.bits;
+      case DeferredOff:
+        return icon_deferred_off_32.bits;
+      case MarkRead:
+        return icon_mark_read_32.bits;
+      case MarkUnread:
+        return icon_mark_unread_32.bits;
+      case BookCover:
+        return icon_book_cover_32.bits;
       default:
         return nullptr;
     }
@@ -236,6 +275,7 @@ void drawUIIcon(const GfxRenderer& renderer, const UIIcon icon, const int x, con
 
   switch (icon) {
     case Recent:
+    case Deferred:
     case Settings:
     case Transfer:
     case Library:
@@ -243,6 +283,7 @@ void drawUIIcon(const GfxRenderer& renderer, const UIIcon icon, const int x, con
     case ChevronUp:
     case ChevronDown:
     case Check:
+    case CheckCheck:
     case House:
     case Filters:
     case NavigateBack:
@@ -256,6 +297,11 @@ void drawUIIcon(const GfxRenderer& renderer, const UIIcon icon, const int x, con
     case Search:
     case ChevronLeft:
     case ChevronRight:
+    case ReadBook:
+    case DeferredOff:
+    case MarkRead:
+    case MarkUnread:
+    case BookCover:
       renderer.drawNativeIcon(bitmap, x, y, size, state);
       break;
     default:

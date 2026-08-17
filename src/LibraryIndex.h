@@ -11,6 +11,7 @@ struct LibraryBook {
   std::vector<std::string> authors;
   std::string series;
   std::string seriesIndex;
+  std::string year;
   std::vector<std::string> tags;
   std::string coverBmpPath;
   uint64_t fileSize = 0;
@@ -18,6 +19,9 @@ struct LibraryBook {
   uint16_t modifiedTime = 0;
   uint8_t progressPercent = 0;
   bool started = false;
+
+  // User state is persisted separately from the metadata index.
+  bool deferred = false;
 
   // Runtime-only guard for lazy cover generation. Failed or unavailable covers
   // are attempted at most once per LibraryActivity session.
@@ -46,6 +50,7 @@ class LibraryIndex {
   // Best-effort helpers for mutations that happen outside LibraryActivity.
   // Missing index files and paths are successful no-ops.
   static bool updateProgress(const std::string& path, uint8_t progressPercent);
+  static bool setProgressState(const std::string& path, uint8_t progressPercent, bool started);
   static bool invalidate(const std::string& path);
 
   static bool sourceMatches(const LibraryBook& book, const LibraryFileInfo& file);

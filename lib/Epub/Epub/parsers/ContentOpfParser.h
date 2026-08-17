@@ -18,6 +18,7 @@ class ContentOpfParser final : public Print {
     IN_BOOK_TITLE,
     IN_BOOK_AUTHOR,
     IN_BOOK_SUBJECT,
+    IN_BOOK_DATE,
     IN_BOOK_LANGUAGE,
     IN_MANIFEST,
     IN_SPINE,
@@ -66,6 +67,7 @@ class ContentOpfParser final : public Print {
   std::string language;
   std::string series;
   std::string seriesIndex;
+  std::string year;
   std::vector<std::string> subjects;
   std::string tocNcxPath;
   std::string tocNavPath;  // EPUB 3 nav document path

@@ -5,15 +5,19 @@
 #include <HalStorage.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 #include "fontIds.h"
+#include "components/UITheme.h"
 
 namespace BookListItem {
 namespace {
 constexpr int TEXT_VERTICAL_INSET = 7;
+constexpr int TEXT_HORIZONTAL_INSET = 8;
 constexpr int TEXT_GAP = 14;
-constexpr int PROGRESS_BAR_HEIGHT = 5;
+constexpr int PROGRESS_ICON_SIZE = 20;
+constexpr int PROGRESS_GAP = 4;
 constexpr float TITLE_LINE_SPACING = 0.5f;
 constexpr size_t TITLE_LINE_BUFFER_SIZE = 192;
 constexpr char ELLIPSIS[] = "\xe2\x80\xa6";
@@ -137,56 +141,71 @@ int drawCover(GfxRenderer& renderer, const LibraryBook& book, const int x, const
 }
 
 int draw(GfxRenderer& renderer, const LibraryBook& book, const int x, const int y, const int width, const int height,
-         const bool selected) {
+         const bool selected, const bool showCover) {
   if (selected) {
     renderer.fillRoundedRect(x, y, width, height, 5, Color::LightGray);
   }
 
-  const int maxCoverWidth = std::max(1, width * 2 / 3);
-  int itemCoverWidth = drawCover(renderer, book, x, y, maxCoverWidth, height);
-  if (itemCoverWidth == 0 && !book.coverAttempted) {
-    itemCoverWidth = std::min(maxCoverWidth, std::max(1, height * 2 / 3));
+  int itemCoverWidth = 0;
+  if (showCover) {
+    const int maxCoverWidth = std::max(1, width * 2 / 3);
+    itemCoverWidth = drawCover(renderer, book, x, y, maxCoverWidth, height);
+    if (itemCoverWidth == 0 && !book.coverAttempted) {
+      itemCoverWidth = std::min(maxCoverWidth, std::max(1, height * 2 / 3));
+    }
   }
   renderer.drawRoundedRect(x, y, width, height, 1, 5, true);
 
-  const int textX = x + itemCoverWidth + TEXT_GAP;
-  const int textRight = x + width - 3;
+  const int textX = showCover ? x + itemCoverWidth + TEXT_GAP : x + TEXT_HORIZONTAL_INSET;
+  const int textRight = x + width - TEXT_HORIZONTAL_INSET;
   const int textWidth = std::max(0, textRight - textX);
-  const int titleY = y + TEXT_VERTICAL_INSET;
+  constexpr int deferredIconSize = 20;
+  constexpr int deferredIconGap = 4;
+  const int titleWidth =
+      book.deferred ? std::max(0, textWidth - deferredIconSize - deferredIconGap) : textWidth;
+  const int verticalInset = showCover ? TEXT_VERTICAL_INSET : 4;
+  const int detailGap = showCover ? 5 : 1;
+  const int titleY = y + verticalInset;
   const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int titleLineStep = std::max(1, renderer.getLineHeight(UI_12_FONT_ID, TITLE_LINE_SPACING));
-  const int titleLineCount = drawTitle(renderer, book.title, textX, titleY, textWidth, titleLineStep);
-  const int authorY = titleY + titleLineHeight + (titleLineCount - 1) * titleLineStep + 5;
+  const int titleLineCount = drawTitle(renderer, book.title, textX, titleY, titleWidth, titleLineStep);
+  if (book.deferred) {
+    drawUIIcon(renderer, Deferred, textRight - deferredIconSize, titleY, deferredIconSize);
+  }
+  const int authorY = titleY + titleLineHeight + (titleLineCount - 1) * titleLineStep + detailGap;
   if (!book.author.empty()) {
     const auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
     renderer.drawText(UI_10_FONT_ID, textX, authorY, author.c_str());
   }
 
-  const int seriesY = authorY + renderer.getLineHeight(UI_10_FONT_ID) + 5;
+  const int seriesY = authorY + renderer.getLineHeight(UI_10_FONT_ID) + detailGap;
   if (!book.series.empty()) {
     std::string series = book.series;
     if (!book.seriesIndex.empty()) {
       series += " · " + displaySeriesIndex(book.seriesIndex);
     }
-    const auto seriesText = renderer.truncatedText(SMALL_FONT_ID, series.c_str(), textWidth);
+    int seriesWidth = textWidth;
+    if (book.progressPercent > 0) {
+      const int indicatorWidth = book.progressPercent >= 100
+                                     ? PROGRESS_ICON_SIZE
+                                     : renderer.getTextWidth(SMALL_FONT_ID, "100%");
+      seriesWidth = std::max(0, textWidth - indicatorWidth - PROGRESS_GAP);
+    }
+    const auto seriesText = renderer.truncatedText(SMALL_FONT_ID, series.c_str(), seriesWidth);
     renderer.drawText(SMALL_FONT_ID, textX, seriesY, seriesText.c_str());
   }
 
-  if (!book.started) return itemCoverWidth;
+  if (book.progressPercent == 0) return itemCoverWidth;
 
-  const std::string progressText = std::to_string(book.progressPercent) + "%";
-  const int progressY = y + height - TEXT_VERTICAL_INSET - renderer.getLineHeight(SMALL_FONT_ID);
-  renderer.drawText(SMALL_FONT_ID, textX, progressY, progressText.c_str());
-  const int labelWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText.c_str());
-  const int barX = textX + labelWidth + 8;
-  const int barWidth = std::max(0, textRight - barX);
-  const int barY = progressY + renderer.getLineHeight(SMALL_FONT_ID) / 2 - PROGRESS_BAR_HEIGHT / 2;
-  if (barWidth <= 0) return itemCoverWidth;
-
-  renderer.drawRect(barX, barY, barWidth, PROGRESS_BAR_HEIGHT);
-  const int fillWidth = std::max(0, (barWidth - 2) * book.progressPercent / 100);
-  if (fillWidth > 0) {
-    renderer.fillRect(barX + 1, barY + 1, fillWidth, PROGRESS_BAR_HEIGHT - 2);
+  if (book.progressPercent >= 100) {
+    drawUIIcon(renderer, CheckCheck, textRight - PROGRESS_ICON_SIZE, y + height - verticalInset - PROGRESS_ICON_SIZE,
+               PROGRESS_ICON_SIZE);
+  } else {
+    char progressText[5];
+    snprintf(progressText, sizeof(progressText), "%u%%", static_cast<unsigned>(book.progressPercent));
+    const int progressWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText);
+    const int progressY = y + height - verticalInset - renderer.getLineHeight(SMALL_FONT_ID);
+    renderer.drawText(SMALL_FONT_ID, textRight - progressWidth, progressY, progressText);
   }
   return itemCoverWidth;
 }

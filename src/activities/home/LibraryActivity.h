@@ -10,8 +10,6 @@
 #include "util/ButtonNavigator.h"
 
 class LibraryActivity final : public Activity {
-  enum class CoverAttemptResult { None, Attempted, Updated };
-
   std::vector<LibraryBook> books;
   size_t selectorIndex = 0;
   size_t scannedBookCount = 0;
@@ -27,8 +25,8 @@ class LibraryActivity final : public Activity {
   bool scanLibrary(bool indexLoaded);
   bool scanDirectory(const std::string& path, std::vector<LibraryFileInfo>& bookFiles);
   LibraryBook loadBook(const LibraryFileInfo& file);
-  CoverAttemptResult ensureNextVisibleCover();
   void openFilters();
+  void openBookMenu(LibraryBook& book);
   std::vector<size_t> filteredBookIndices() const;
   bool matchesFilters(const LibraryBook& book) const;
   void sortBooks();

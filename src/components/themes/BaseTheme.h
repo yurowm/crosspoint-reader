@@ -134,6 +134,7 @@ enum UIIcon {
   Book,
   File,
   Recent,
+  Deferred,
   Settings,
   Transfer,
   Library,
@@ -144,6 +145,7 @@ enum UIIcon {
   ChevronUp,
   ChevronDown,
   Check,
+  CheckCheck,
   House,
   Filters,
   NavigateBack,
@@ -156,7 +158,12 @@ enum UIIcon {
   Exit,
   Search,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ReadBook,
+  DeferredOff,
+  MarkRead,
+  MarkUnread,
+  BookCover
 };
 
 struct ButtonHint {

@@ -25,6 +25,14 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
+
+int pageProgressPercent(const int currentPage, const int totalPages) {
+  if (totalPages <= 0) return 0;
+  const int page = std::clamp(currentPage, 0, totalPages - 1);
+  if (page == totalPages - 1) return 100;
+  const int rounded = static_cast<int>((page + 1) * 100.0f / totalPages + 0.5f);
+  return std::clamp(rounded, 0, 99);
+}
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -60,8 +68,7 @@ void TxtReaderActivity::onExit() {
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   if (txt && totalPages > 0) {
-    const int percent = static_cast<int>((std::clamp(currentPage, 0, totalPages - 1) + 1) * 100.0f / totalPages + 0.5f);
-    LibraryIndex::updateProgress(txt->getPath(), static_cast<uint8_t>(std::clamp(percent, 0, 100)));
+    LibraryIndex::updateProgress(txt->getPath(), static_cast<uint8_t>(pageProgressPercent(currentPage, totalPages)));
   }
   txt.reset();
 }
@@ -584,7 +591,6 @@ ScreenshotInfo TxtReaderActivity::getScreenshotInfo() const {
   }
   info.currentPage = currentPage + 1;
   info.totalPages = totalPages;
-  info.progressPercent = totalPages > 0 ? static_cast<int>((currentPage + 1) * 100.0f / totalPages + 0.5f) : 0;
-  if (info.progressPercent > 100) info.progressPercent = 100;
+  info.progressPercent = pageProgressPercent(currentPage, totalPages);
   return info;
 }

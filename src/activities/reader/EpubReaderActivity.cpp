@@ -29,6 +29,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "LibraryIndex.h"
+#include "LibraryBookStateStore.h"
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
@@ -144,6 +145,7 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
   // Keep the book in recents (crossink behavior): repoint the entry to its new
   // location instead of dropping it. updatePath persists on success.
   RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, newCachePath);
+  LIBRARY_BOOK_STATE.updatePath(srcPath, dstPath);
   if (APP_STATE.openEpubPath == srcPath) {
     APP_STATE.openEpubPath = dstPath;
     APP_STATE.saveToFile();
@@ -249,14 +251,24 @@ void EpubReaderActivity::onExit() {
       progressPage = origin.pageNumber;
       progressPageCount = origin.pageCount;
     }
-    int percent = 100;
-    if (progressSpine < epub->getSpineItemsCount()) {
+    const int spineCount = epub->getSpineItemsCount();
+    int percent = spineCount > 0 && progressSpine >= spineCount ? 100 : 0;
+    if (spineCount > 0 && progressSpine < spineCount) {
       progressSpine = std::max(0, progressSpine);
-      const float chapterProgress = progressPageCount > 0
-                                        ? static_cast<float>(std::clamp(progressPage, 0, progressPageCount)) /
-                                              static_cast<float>(progressPageCount)
-                                        : 0.0f;
-      percent = static_cast<int>(epub->calculateProgress(progressSpine, chapterProgress) * 100.0f + 0.5f);
+      const bool onFinalPage = footnoteDepth == 0 && section && progressSpine == spineCount - 1 &&
+                               section->isBuildComplete() && section->pageCount > 0 &&
+                               progressPage >= static_cast<int>(section->pageCount) - 1;
+      if (onFinalPage) {
+        percent = 100;
+      } else {
+        const float chapterProgress = progressPageCount > 0
+                                          ? static_cast<float>(std::clamp(progressPage, 0, progressPageCount)) /
+                                                static_cast<float>(progressPageCount)
+                                          : 0.0f;
+        const int rounded =
+            static_cast<int>(epub->calculateProgress(progressSpine, chapterProgress) * 100.0f + 0.5f);
+        percent = std::clamp(rounded, 0, 99);
+      }
     }
     LibraryIndex::updateProgress(epub->getPath(), static_cast<uint8_t>(std::clamp(percent, 0, 100)));
   }

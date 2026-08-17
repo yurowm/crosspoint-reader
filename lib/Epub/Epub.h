@@ -58,6 +58,7 @@ class Epub {
   const std::string& getLanguage() const;
   const std::string& getSeries() const;
   const std::string& getSeriesIndex() const;
+  std::string readPublicationYear();
   const std::vector<std::string>& getSubjects() const;
   std::string getCoverBmpPath(bool cropped = false) const;
   bool generateCoverBmp(bool cropped = false) const;

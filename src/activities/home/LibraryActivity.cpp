@@ -11,11 +11,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <unordered_map>
 
 #include "LibraryFiltersActivity.h"
+#include "LibraryBookMenuActivity.h"
+#include "LibraryBookStateStore.h"
 #include "MappedInputManager.h"
 #include "components/BookListItem.h"
 #include "components/UITheme.h"
@@ -27,6 +30,7 @@ constexpr int DIRECTORY_STACK_RESERVE = 16;
 constexpr int FILE_NAME_BUFFER_SIZE = 500;
 constexpr size_t SCAN_PROGRESS_UPDATES = 10;
 constexpr unsigned long FILTER_HOLD_MS = 1000;
+constexpr unsigned long CONFIRM_HOLD_MS = 1000;
 constexpr unsigned long NAVIGATION_REPEAT_START_MS = 500;
 constexpr unsigned long NAVIGATION_REPEAT_INTERVAL_MS = 500;
 
@@ -50,10 +54,44 @@ bool matchesSelection(const std::vector<std::string>& values, const std::set<std
                      [&selected](const std::string& value) { return selected.contains(value); });
 }
 
+int compareNaturalField(const std::string& left, const std::string& right) {
+  if (left == right) return 0;
+  if (left.empty()) return 1;
+  if (right.empty()) return -1;
+  if (FsHelpers::naturalLess(left, right)) return -1;
+  if (FsHelpers::naturalLess(right, left)) return 1;
+  return 0;
+}
+
+bool parseSeriesIndex(const std::string& value, double& result) {
+  if (value.empty()) return false;
+  char* end = nullptr;
+  result = std::strtod(value.c_str(), &end);
+  return end != value.c_str() && *end == '\0';
+}
+
+int compareSeriesIndex(const std::string& left, const std::string& right) {
+  if (left == right) return 0;
+  if (left.empty()) return 1;
+  if (right.empty()) return -1;
+
+  double leftNumber = 0.0;
+  double rightNumber = 0.0;
+  const bool leftNumeric = parseSeriesIndex(left, leftNumber);
+  const bool rightNumeric = parseSeriesIndex(right, rightNumber);
+  if (leftNumeric && rightNumeric) {
+    if (leftNumber < rightNumber) return -1;
+    if (leftNumber > rightNumber) return 1;
+    return 0;
+  }
+  if (leftNumeric != rightNumeric) return leftNumeric ? -1 : 1;
+  return compareNaturalField(left, right);
+}
+
 ButtonHint libraryButtonHint(const MappedInputManager::NavigationAction action) {
   switch (action) {
     case MappedInputManager::NavigationAction::Back:
-      return {.icon = House, .holdIcon = Filters};
+      return {.icon = NavigateBack, .holdIcon = Filters};
     case MappedInputManager::NavigationAction::Confirm:
       return {.icon = Check};
     case MappedInputManager::NavigationAction::Previous:
@@ -98,10 +136,15 @@ bool LibraryActivity::readEpubProgress(const Epub& epub, uint8_t& progressPercen
     return false;
   }
 
+  if (spineIndex >= spineCount) {
+    progressPercent = 100;
+    return true;
+  }
+
   const int clampedSpine = std::clamp(spineIndex, 0, spineCount - 1);
   const float chapterProgress = pageCount > 0 ? static_cast<float>(currentPage) / pageCount : 0.0f;
   const int percent = static_cast<int>(epub.calculateProgress(clampedSpine, chapterProgress) * 100.0f + 0.5f);
-  progressPercent = static_cast<uint8_t>(std::clamp(percent, 0, 100));
+  progressPercent = static_cast<uint8_t>(std::clamp(percent, 0, 99));
   return true;
 }
 
@@ -147,6 +190,7 @@ LibraryBook LibraryActivity::loadBook(const LibraryFileInfo& file) {
       }
       book.series = epub.getSeries();
       book.seriesIndex = epub.getSeriesIndex();
+      book.year = epub.readPublicationYear();
       book.tags = epub.getSubjects();
       const std::string thumb = epub.getThumbBmpPath(BookListItem::DEFAULT_COVER_CACHE_HEIGHT);
       if (Storage.exists(thumb.c_str())) {
@@ -168,6 +212,8 @@ LibraryBook LibraryActivity::loadBook(const LibraryFileInfo& file) {
       book.started = readXtcProgress(xtc, book.progressPercent);
     }
   }
+
+  book.deferred = LIBRARY_BOOK_STATE.isDeferred(book.path);
 
   return book;
 }
@@ -296,9 +342,16 @@ void LibraryActivity::onEnter() {
   lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
   indexDirty = false;
 
+  if (LIBRARY_BOOK_STATE.pruneMissing() && !LIBRARY_BOOK_STATE.saveToFile()) {
+    LOG_ERR("LIB", "Failed to persist deferred-book cleanup");
+  }
+
   // A valid index paints the complete library immediately. The directory pass
   // that follows only opens book metadata for new or changed source files.
   const bool indexLoaded = LibraryIndex::load(books);
+  for (auto& book : books) {
+    book.deferred = LIBRARY_BOOK_STATE.isDeferred(book.path);
+  }
   sortBooks();
   restoreSelector();
   scanning = !indexLoaded;
@@ -315,64 +368,9 @@ void LibraryActivity::onExit() {
     LOG_ERR("LIB", "Failed to persist library view state");
   }
   if (indexDirty && !LibraryIndex::save(books)) {
-    LOG_ERR("LIB", "Failed to persist lazy cover updates");
+    LOG_ERR("LIB", "Failed to persist library index");
   }
   books.clear();
-}
-
-LibraryActivity::CoverAttemptResult LibraryActivity::ensureNextVisibleCover() {
-  const auto bookIndices = filteredBookIndices();
-  if (bookIndices.empty()) return CoverAttemptResult::None;
-
-  const size_t pageStart = selectorIndex / BookListItem::ITEMS_PER_PAGE * BookListItem::ITEMS_PER_PAGE;
-  const size_t pageEnd = std::min(bookIndices.size(), pageStart + BookListItem::ITEMS_PER_PAGE);
-  bool attemptedAny = false;
-  for (size_t index = pageStart; index < pageEnd; index++) {
-    LibraryBook& book = books[bookIndices[index]];
-    if (book.coverAttempted) continue;
-    book.coverAttempted = true;
-    attemptedAny = true;
-
-    if (!book.coverBmpPath.empty()) {
-      const std::string thumbPath =
-          UITheme::getCoverThumbPath(book.coverBmpPath, BookListItem::DEFAULT_COVER_CACHE_HEIGHT);
-      if (thumbPath != book.coverBmpPath) {
-        book.coverBmpPath = thumbPath;
-        indexDirty = true;
-      }
-    }
-
-    if (!book.coverBmpPath.empty() && Storage.exists(book.coverBmpPath.c_str())) {
-      continue;
-    }
-    book.coverBmpPath.clear();
-
-    if (FsHelpers::hasEpubExtension(book.path)) {
-      Epub epub(book.path, "/.crosspoint");
-      if (epub.loadMetadata()) {
-        const std::string thumb = epub.getThumbBmpPath(BookListItem::DEFAULT_COVER_CACHE_HEIGHT);
-        if (Storage.exists(thumb.c_str()) || epub.generateThumbBmp(BookListItem::DEFAULT_COVER_CACHE_HEIGHT)) {
-          book.coverBmpPath = thumb;
-          indexDirty = true;
-          return CoverAttemptResult::Updated;
-        }
-      }
-    } else if (FsHelpers::hasXtcExtension(book.path)) {
-      Xtc xtc(book.path, "/.crosspoint");
-      if (xtc.load()) {
-        const std::string thumb = xtc.getThumbBmpPath(BookListItem::DEFAULT_COVER_CACHE_HEIGHT);
-        if (Storage.exists(thumb.c_str()) || xtc.generateThumbBmp(BookListItem::DEFAULT_COVER_CACHE_HEIGHT)) {
-          book.coverBmpPath = thumb;
-          indexDirty = true;
-          return CoverAttemptResult::Updated;
-        }
-      }
-    }
-    // Do at most one potentially expensive generation per main-loop pass so
-    // the first text-only frame remains visible and responsive.
-    return CoverAttemptResult::Attempted;
-  }
-  return attemptedAny ? CoverAttemptResult::Attempted : CoverAttemptResult::None;
 }
 
 bool LibraryActivity::matchesFilters(const LibraryBook& book) const {
@@ -408,16 +406,15 @@ void LibraryActivity::sortBooks() {
     return FsHelpers::naturalLess(left.author, right.author);
   };
   const auto bySeries = [&byTitle](const LibraryBook& left, const LibraryBook& right) {
-    if (left.series != right.series) {
-      if (left.series.empty()) return false;
-      if (right.series.empty()) return true;
-      return FsHelpers::naturalLess(left.series, right.series);
-    }
-    if (left.seriesIndex != right.seriesIndex) {
-      if (left.seriesIndex.empty()) return false;
-      if (right.seriesIndex.empty()) return true;
-      return FsHelpers::naturalLess(left.seriesIndex, right.seriesIndex);
-    }
+    const int authorOrder = compareNaturalField(left.author, right.author);
+    if (authorOrder != 0) return authorOrder < 0;
+
+    const int seriesOrder = compareNaturalField(left.series, right.series);
+    if (seriesOrder != 0) return seriesOrder < 0;
+
+    const int indexOrder = compareSeriesIndex(left.seriesIndex, right.seriesIndex);
+    if (indexOrder != 0) return indexOrder < 0;
+
     return byTitle(left, right);
   };
 
@@ -484,9 +481,23 @@ void LibraryActivity::openFilters() {
   });
 }
 
+void LibraryActivity::openBookMenu(LibraryBook& book) {
+  rememberSelectedBook();
+  auto menu = makeUniqueNoThrow<LibraryBookMenuActivity>(renderer, mappedInput, book);
+  if (!menu) {
+    LOG_ERR("LIB", "OOM: LibraryBookMenuActivity");
+    return;
+  }
+  startActivityForResult(std::move(menu), [this](const ActivityResult&) {
+    requestUpdate();
+  });
+}
+
 void LibraryActivity::loop() {
-  if (lockNextConfirmRelease && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    lockNextConfirmRelease = false;
+  if (lockNextConfirmRelease) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      lockNextConfirmRelease = false;
+    }
     return;
   }
 
@@ -526,7 +537,7 @@ void LibraryActivity::loop() {
       viewState.dirty = true;
     }
     if (touch == MappedInputManager::RowTouch::Tap) {
-      onSelectBook(books[bookIndices[selectorIndex]].path);
+      openBookMenu(books[bookIndices[selectorIndex]]);
     } else {
       requestUpdate();
     }
@@ -534,7 +545,9 @@ void LibraryActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    onSelectBook(books[bookIndices[selectorIndex]].path);
+    if (mappedInput.getHeldTime() < CONFIRM_HOLD_MS) {
+      openBookMenu(books[bookIndices[selectorIndex]]);
+    }
     return;
   }
 
@@ -589,9 +602,6 @@ void LibraryActivity::loop() {
     }
   }
 
-  if (ensureNextVisibleCover() != CoverAttemptResult::None) {
-    requestUpdate();
-  }
 }
 
 void LibraryActivity::render(RenderLock&&) {
@@ -654,7 +664,7 @@ void LibraryActivity::render(RenderLock&&) {
         const bool selected = index == static_cast<int>(selectorIndex);
 
         const LibraryBook& book = books[bookIndices[index]];
-        BookListItem::draw(renderer, book, contentSidePadding, rowY, rowWidth, rowHeight, selected);
+        BookListItem::draw(renderer, book, contentSidePadding, rowY, rowWidth, rowHeight, selected, false);
       }
     }
   }

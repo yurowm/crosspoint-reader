@@ -82,6 +82,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   bookMetadata.language = opfParser.language;
   bookMetadata.series = opfParser.series;
   bookMetadata.seriesIndex = opfParser.seriesIndex;
+  bookMetadata.year = opfParser.year;
   bookMetadata.subjects = opfParser.subjects;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
 
@@ -601,6 +602,17 @@ const std::string& Epub::getSeriesIndex() const {
   }
 
   return bookMetadataCache->coreMetadata.seriesIndex;
+}
+
+std::string Epub::readPublicationYear() {
+  if (bookMetadataCache && bookMetadataCache->isLoaded() && !bookMetadataCache->coreMetadata.year.empty()) {
+    return bookMetadataCache->coreMetadata.year;
+  }
+  BookMetadataCache::BookMetadata metadata;
+  if (!parseContentOpf(metadata, /*writeSpineEntries=*/false)) {
+    return {};
+  }
+  return metadata.year;
 }
 
 const std::vector<std::string>& Epub::getSubjects() const {

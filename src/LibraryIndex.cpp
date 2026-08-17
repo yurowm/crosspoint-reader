@@ -10,7 +10,7 @@
 #include <utility>
 
 namespace {
-constexpr std::array<uint8_t, 5> HEADER = {'L', 'I', 'D', 'X', 1};
+constexpr std::array<uint8_t, 5> HEADER = {'L', 'I', 'D', 'X', 2};
 constexpr const char* TMP_FILE_PATH = "/.crosspoint/library.idx.tmp";
 constexpr uint32_t MAX_BOOKS = 4096;
 constexpr uint32_t MAX_STRING_BYTES = 16 * 1024;
@@ -74,7 +74,7 @@ bool readBook(HalFile& file, LibraryBook& book) {
   const bool ok = readPod(file, book.fileSize) && readPod(file, book.modifiedDate) &&
                   readPod(file, book.modifiedTime) && readString(file, book.path) && readString(file, book.title) &&
                   readString(file, book.author) && readStringList(file, book.authors) &&
-                  readString(file, book.series) && readString(file, book.seriesIndex) &&
+                  readString(file, book.series) && readString(file, book.seriesIndex) && readString(file, book.year) &&
                   readStringList(file, book.tags) && readString(file, book.coverBmpPath) &&
                   readPod(file, book.progressPercent) && readPod(file, started);
   if (!ok) return false;
@@ -87,7 +87,7 @@ bool writeBook(HalFile& file, const LibraryBook& book) {
   return writePod(file, book.fileSize) && writePod(file, book.modifiedDate) && writePod(file, book.modifiedTime) &&
          writeString(file, book.path) && writeString(file, book.title) && writeString(file, book.author) &&
          writeStringList(file, book.authors) && writeString(file, book.series) && writeString(file, book.seriesIndex) &&
-         writeStringList(file, book.tags) && writeString(file, book.coverBmpPath) &&
+         writeString(file, book.year) && writeStringList(file, book.tags) && writeString(file, book.coverBmpPath) &&
          writePod(file, book.progressPercent) && writePod(file, started);
 }
 }  // namespace
@@ -203,14 +203,18 @@ bool LibraryIndex::save(const std::vector<LibraryBook>& books) {
 }
 
 bool LibraryIndex::updateProgress(const std::string& path, const uint8_t progressPercent) {
+  return setProgressState(path, progressPercent, true);
+}
+
+bool LibraryIndex::setProgressState(const std::string& path, const uint8_t progressPercent, const bool started) {
   std::vector<LibraryBook> books;
   if (!load(books)) return true;
   auto it = std::find_if(books.begin(), books.end(), [&path](const LibraryBook& book) { return book.path == path; });
   if (it == books.end()) return true;
 
   const uint8_t clamped = std::min<uint8_t>(progressPercent, 100);
-  if (it->started && it->progressPercent == clamped) return true;
-  it->started = true;
+  if (it->started == started && it->progressPercent == clamped) return true;
+  it->started = started;
   it->progressPercent = clamped;
   return save(books);
 }

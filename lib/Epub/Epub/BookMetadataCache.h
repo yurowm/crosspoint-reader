@@ -18,6 +18,7 @@ class BookMetadataCache {
     std::string language;
     std::string series;
     std::string seriesIndex;
+    std::string year;
     std::vector<std::string> subjects;
     std::string coverItemHref;
     std::string textReferenceHref;
