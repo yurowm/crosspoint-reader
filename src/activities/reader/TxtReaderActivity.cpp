@@ -5,18 +5,17 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <Serialization.h>
 #include <Utf8.h>
 
 #include <algorithm>
 
 #include "CrossPointSettings.h"
-#include "CrossPointState.h"
 #include "LibraryIndex.h"
-#include "MappedInputManager.h"
 #include "ProgressFile.h"
+#include "ReaderActivity.h"
 #include "ReaderUtils.h"
-#include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -35,72 +34,30 @@ int pageProgressPercent(const int currentPage, const int totalPages) {
 }
 }  // namespace
 
-void TxtReaderActivity::onEnter() {
-  Activity::onEnter();
-
+bool TxtReaderActivity::loadBook() {
+  txt = makeUniqueNoThrow<Txt>(bookPath, "/.crosspoint");
   if (!txt) {
-    return;
+    LOG_ERR("TRS", "Failed to allocate TXT object");
+    return false;
   }
-
-  ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-
+  if (!txt->load()) {
+    LOG_ERR("TRS", "Failed to load TXT");
+    return false;
+  }
   txt->setupCacheDir();
-
-  // Save current txt as last opened file and add to recent books
-  auto filePath = txt->getPath();
-  auto fileName = filePath.substr(filePath.rfind('/') + 1);
-  APP_STATE.openEpubPath = filePath;
-  APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(filePath, fileName, "", "");
-
-  // Trigger first update
-  requestUpdate();
+  return true;
 }
 
-void TxtReaderActivity::onExit() {
-  Activity::onExit();
-
-  // Reset orientation back to portrait for the rest of the UI
-  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-
+TxtReaderActivity::~TxtReaderActivity() {
   pageOffsets.clear();
   currentPageLines.clear();
-  APP_STATE.readerActivityLoadCount = 0;
-  APP_STATE.saveToFile();
   if (txt && totalPages > 0) {
     LibraryIndex::updateProgress(txt->getPath(), static_cast<uint8_t>(pageProgressPercent(currentPage, totalPages)));
   }
   txt.reset();
 }
 
-void TxtReaderActivity::loop() {
-  if (ReaderUtils::handleBackNavigation(mappedInput, activityManager, txt ? txt->getPath().c_str() : "",
-                                        {this, [](void* ctx) { static_cast<TxtReaderActivity*>(ctx)->onGoHome(); }})) {
-    return;
-  }
-
-  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
-  auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
-  prevTriggered = prevTriggered || touch.prev;
-  nextTriggered = nextTriggered || touch.next;
-  if (!prevTriggered && !nextTriggered) {
-    return;
-  }
-
-  if (prevTriggered && currentPage > 0) {
-    currentPage--;
-    requestUpdate();
-  } else if (nextTriggered) {
-    if (currentPage < totalPages - 1) {
-      currentPage++;
-      requestUpdate();
-    } else {
-      onGoHome();
-    }
-  }
-}
-
-void TxtReaderActivity::initializeReader() {
+void TxtReaderActivity::initializeReader(GfxRenderer& renderer) {
   if (initialized) {
     return;
   }
@@ -133,7 +90,7 @@ void TxtReaderActivity::initializeReader() {
   // Try to load cached page index first
   if (!loadPageIndexCache()) {
     // Cache not found, build page index
-    buildPageIndex();
+    buildPageIndex(renderer);
     // Save to cache for next time
     savePageIndexCache();
   }
@@ -144,7 +101,7 @@ void TxtReaderActivity::initializeReader() {
   initialized = true;
 }
 
-void TxtReaderActivity::buildPageIndex() {
+void TxtReaderActivity::buildPageIndex(GfxRenderer& renderer) {
   pageOffsets.clear();
   pageOffsets.push_back(0);  // First page starts at offset 0
 
@@ -159,7 +116,7 @@ void TxtReaderActivity::buildPageIndex() {
     std::vector<std::string> tempLines;
     size_t nextOffset = offset;
 
-    if (!loadPageAtOffset(offset, tempLines, nextOffset)) {
+    if (!loadPageAtOffset(renderer, offset, tempLines, nextOffset)) {
       break;
     }
 
@@ -183,7 +140,8 @@ void TxtReaderActivity::buildPageIndex() {
   LOG_DBG("TRS", "Built page index: %d pages", totalPages);
 }
 
-bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset) {
+bool TxtReaderActivity::loadPageAtOffset(GfxRenderer& renderer, size_t offset, std::vector<std::string>& outLines,
+                                         size_t& nextOffset) {
   outLines.clear();
   const size_t fileSize = txt->getFileSize();
 
@@ -205,13 +163,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   }
   buffer[chunkSize] = '\0';
 
-  // Prime the SD card font's advance table with this chunk's codepoints.
-  // Without this, every getTextAdvanceX() call in the wrap loop below triggers
-  // on-demand glyph loads through the 8-slot overflow ring buffer, which
-  // thrashes for any text with more than 8 unique chars (i.e. all English),
-  // floods the heap with short-lived bitmap allocations, and eventually
-  // corrupts FreeRTOS state. The advance table persists across calls per
-  // font, so the cost amortizes to ~ASCII-size after the first chunk.
   if (renderer.isSdCardFont(cachedFontId)) {
     renderer.ensureSdCardFontReady(cachedFontId, reinterpret_cast<const char*>(buffer), /*styleMask=*/0x01);
   }
@@ -234,21 +185,13 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
       break;
     }
 
-    // Calculate the actual length of line content in the buffer (excluding newline)
     size_t lineContentLen = lineEnd - pos;
-
-    // Check for carriage return
     bool hasCR = (lineContentLen > 0 && buffer[pos + lineContentLen - 1] == '\r');
     size_t displayLen = hasCR ? lineContentLen - 1 : lineContentLen;
 
-    // Extract line content for display (without CR/LF)
     std::string line(reinterpret_cast<char*>(buffer + pos), displayLen);
-
-    // Track position within this source line (in bytes from pos)
     size_t lineBytePos = 0;
 
-    // Emit at least one visual line for each source line (including blank lines),
-    // then continue with wrapping when needed.
     do {
       if (line.empty()) {
         outLines.emplace_back();
@@ -259,7 +202,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
       if (lineWidth <= viewportWidth) {
         outLines.push_back(line);
-        lineBytePos = displayLen;  // Consumed entire display content
+        lineBytePos = displayLen;
         line.clear();
         break;
       }
@@ -275,7 +218,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
         } else {
           // Break at character boundary for UTF-8
           breakPos--;
-          // Make sure we don't break in the middle of a UTF-8 sequence
           while (breakPos > 0 && (line[breakPos] & 0xC0) == 0x80) {
             breakPos--;
           }
@@ -288,7 +230,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
       outLines.push_back(line.substr(0, breakPos));
 
-      // Skip space at break point
       size_t skipChars = breakPos;
       if (breakPos < line.length() && line[breakPos] == ' ') {
         skipChars++;
@@ -297,44 +238,34 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
       line = line.substr(skipChars);
     } while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage);
 
-    // Determine how much of the source buffer we consumed
     if (line.empty()) {
-      // Fully consumed this source line, move past the newline
       pos = lineEnd + 1;
     } else {
-      // Partially consumed - page is full mid-line
-      // Move pos to where we stopped in the line (NOT past the line)
       pos = pos + lineBytePos;
       break;
     }
   }
 
-  // Ensure we make progress even if calculations go wrong
   if (pos == 0 && !outLines.empty()) {
-    // Fallback: at minimum, consume something to avoid infinite loop
     pos = 1;
   }
 
   nextOffset = offset + pos;
-
-  // Make sure we don't go past the file
   if (nextOffset > fileSize) {
     nextOffset = fileSize;
   }
 
   free(buffer);
-
   return !outLines.empty();
 }
 
-void TxtReaderActivity::render(RenderLock&&) {
+void TxtReaderActivity::renderBook() {
   if (!txt) {
     return;
   }
 
-  // Initialize reader if not done
   if (!initialized) {
-    initializeReader();
+    initializeReader(renderer);
   }
 
   if (pageOffsets.empty()) {
@@ -352,16 +283,16 @@ void TxtReaderActivity::render(RenderLock&&) {
   size_t offset = pageOffsets[currentPage];
   size_t nextOffset;
   currentPageLines.clear();
-  loadPageAtOffset(offset, currentPageLines, nextOffset);
+  loadPageAtOffset(renderer, offset, currentPageLines, nextOffset);
 
   renderer.clearScreen();
-  renderPage();
+  renderPage(renderer);
 
   // Save progress
   saveProgress();
 }
 
-void TxtReaderActivity::renderPage() {
+void TxtReaderActivity::renderPage(GfxRenderer& renderer) {
   const int lineHeight = renderer.getLineHeight(cachedFontId);
   const int contentWidth = viewportWidth;
 
@@ -383,7 +314,6 @@ void TxtReaderActivity::renderPage() {
         switch (effectiveAlignment) {
           case CrossPointSettings::LEFT_ALIGN:
           default:
-            // x already set to left margin
             break;
           case CrossPointSettings::CENTER_ALIGN: {
             x = cachedOrientedMarginLeft + (contentWidth - textWidth) / 2;
@@ -394,8 +324,6 @@ void TxtReaderActivity::renderPage() {
             break;
           }
           case CrossPointSettings::JUSTIFIED:
-            // For plain text, justified is treated as left-aligned
-            // (true justification would require word spacing adjustments)
             break;
         }
 
@@ -408,19 +336,19 @@ void TxtReaderActivity::renderPage() {
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  renderLines();  // scan pass — text accumulated, no drawing
+  renderLines();  // scan pass
   scope.endScanAndPrewarm();
 
   // BW rendering
   renderLines();
   renderStatusBar();
 
-  ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
-
   if (SETTINGS.textAntiAliasing) {
+    ReaderUtils::displayBaseWithRefreshCycle(renderer, pagesUntilFullRefresh);
     ReaderUtils::renderAntiAliased(renderer, [&renderLines]() { renderLines(); });
+  } else {
+    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
   }
-  // scope destructor clears font cache via FontCacheManager
 }
 
 void TxtReaderActivity::renderStatusBar() const {
@@ -431,6 +359,46 @@ void TxtReaderActivity::renderStatusBar() const {
   }
   GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);
 }
+
+bool TxtReaderActivity::pageTurn(bool isForward) {
+  // Ignore paging until initializeReader has established the page index
+  if (!initialized) {
+    return false;
+  }
+  if (isForward) {
+    if (currentPage < totalPages) {
+      currentPage++;
+      return true;
+    }
+  } else {
+    if (currentPage > 0) {
+      currentPage--;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool TxtReaderActivity::skipPages(int amount) {
+  if (!initialized) {
+    return false;
+  }
+  int newPage = currentPage + amount;
+  if (newPage < 0) newPage = 0;
+  // Clamp to totalPages, not totalPages - 1: pageTurn() lets currentPage reach
+  // totalPages and isAtEndOfBook() treats that as the end-of-book sentinel, so
+  // a forward skip must be able to reach it too.
+  if (newPage > totalPages) newPage = totalPages;
+  if (newPage != currentPage) {
+    currentPage = newPage;
+    return true;
+  }
+  return false;
+}
+
+bool TxtReaderActivity::isAtEndOfBook() const { return initialized && currentPage >= totalPages; }
+
+void TxtReaderActivity::onReturnFromEndOfBook() { currentPage = totalPages > 0 ? totalPages - 1 : 0; }
 
 void TxtReaderActivity::saveProgress() const {
   uint8_t data[4];
@@ -461,18 +429,6 @@ void TxtReaderActivity::loadProgress() {
 }
 
 bool TxtReaderActivity::loadPageIndexCache() {
-  // Cache file format (using serialization module):
-  // - uint32_t: magic "TXTI"
-  // - uint8_t: cache version
-  // - uint32_t: file size (to validate cache)
-  // - int32_t: viewport width
-  // - int32_t: lines per page
-  // - int32_t: font ID (to invalidate cache on font change)
-  // - int32_t: screen margin (to invalidate cache on margin change)
-  // - uint8_t: paragraph alignment (to invalidate cache on alignment change)
-  // - uint32_t: total pages count
-  // - N * uint32_t: page offsets
-
   std::string cachePath = txt->getCachePath() + "/index.bin";
   HalFile f;
   if (!Storage.openFileForRead("TRS", cachePath, f)) {
@@ -480,7 +436,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
     return false;
   }
 
-  // Read and validate header using serialization module
   uint32_t magic;
   serialization::readPod(f, magic);
   if (magic != CACHE_MAGIC) {
@@ -540,7 +495,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
   uint32_t numPages;
   serialization::readPod(f, numPages);
 
-  // Read page offsets
   pageOffsets.clear();
   pageOffsets.reserve(numPages);
 
@@ -563,7 +517,6 @@ void TxtReaderActivity::savePageIndexCache() const {
     return;
   }
 
-  // Write header using serialization module
   serialization::writePod(f, CACHE_MAGIC);
   serialization::writePod(f, CACHE_VERSION);
   serialization::writePod(f, static_cast<uint32_t>(txt->getFileSize()));
@@ -574,7 +527,6 @@ void TxtReaderActivity::savePageIndexCache() const {
   serialization::writePod(f, cachedParagraphAlignment);
   serialization::writePod(f, static_cast<uint32_t>(pageOffsets.size()));
 
-  // Write page offsets
   for (size_t offset : pageOffsets) {
     serialization::writePod(f, static_cast<uint32_t>(offset));
   }

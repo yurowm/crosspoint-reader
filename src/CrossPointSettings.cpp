@@ -173,11 +173,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
 
   // Before line spacing became a percentage, settings stored the enum slots
-  // Tight=0, Normal=1 and Wide=2. Map those labels to their neutral percentage
+  // Tight=0, Normal=1, Wide=2 and Extra Wide=3. Map those labels to percentages
   // equivalents, then snap percentage values to the supported 5% grid.
   const uint8_t storedLineSpacing = doc["lineSpacing"] | LINE_SPACING_DEFAULT;
-  if (storedLineSpacing <= 2) {
-    constexpr uint8_t LEGACY_LINE_SPACING[] = {95, 100, 110};
+  if (storedLineSpacing <= 3) {
+    constexpr uint8_t LEGACY_LINE_SPACING[] = {95, 100, 110, 120};
     lineSpacing = LEGACY_LINE_SPACING[storedLineSpacing];
     needsResave = true;
   } else {

@@ -330,6 +330,34 @@ void HomeActivity::loop() {
     return;
   }
 
+  // Back is otherwise unused on the home menu: open the most recently read
+  // book directly (recentBooks is most-recent-first and already pruned of
+  // files missing from the SD card).
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && !recentBooks.empty()) {
+    onSelectBook(recentBooks[0].path);
+    return;
+  }
+
+  // The customized Home presents one current book regardless of how many
+  // covers a theme can render, so the complete cover tile activates Continue.
+  const int recentCount = recentBooks.empty() ? 0 : 1;
+  const int coverColumnWidth = renderer.getScreenWidth();
+  int touchedBook = -1;
+  const auto coverTouch = mappedInput.colTouch(touchedBook, 0, coverColumnWidth, recentCount, metrics.homeTopPadding,
+                                               metrics.homeTopPadding + metrics.homeCoverTileHeight, coverColumnWidth);
+  if (coverTouch != MappedInputManager::RowTouch::None) {
+    if (coverTouch == MappedInputManager::RowTouch::Down) {
+      if (selectorIndex != 0) {
+        selectorIndex = 0;
+        requestUpdate();
+      }
+    } else {
+      selectorIndex = 0;
+      activateSelection();
+    }
+    return;
+  }
+
   const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
   int menuRow = -1;
   // Row height from the theme, not the metrics table: RoundedRaff draws
