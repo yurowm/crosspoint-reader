@@ -10,6 +10,7 @@
 #include "CrossPointState.h"
 #include "EpubReaderActivity.h"
 #include "ReaderUtils.h"
+#include "ReadingStats.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "TxtReaderActivity.h"
@@ -63,6 +64,8 @@ void ReaderActivity::onEnter() {
     return;
   }
 
+  READING_STATS.startSession(bookPath);
+
   APP_STATE.openEpubPath = bookPath;
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(bookPath, getBookTitle(), getBookAuthor(), getBookThumbBmpPath());
@@ -70,6 +73,7 @@ void ReaderActivity::onEnter() {
 }
 
 void ReaderActivity::onExit() {
+  READING_STATS.finishSession();
   Activity::onExit();
 
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -155,15 +159,15 @@ void ReaderActivity::loop() {
 
   if (prevTriggered) {
     if (skip) {
-      skipPages(-10);
+      if (skipPages(-10)) READING_STATS.recordPageTurn(false);
     } else {
-      pageTurn(false);
+      if (pageTurn(false)) READING_STATS.recordPageTurn(false);
     }
   } else {
     if (skip) {
-      skipPages(10);
+      if (skipPages(10)) READING_STATS.recordPageTurn(true);
     } else {
-      pageTurn(true);
+      if (pageTurn(true)) READING_STATS.recordPageTurn(true);
     }
   }
   requestUpdate();

@@ -28,13 +28,15 @@
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
-#include "LibraryIndex.h"
 #include "LibraryBookStateStore.h"
+#include "LibraryIndex.h"
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderActivity.h"
 #include "ReaderUtils.h"
+#include "ReadingStats.h"
+#include "ReadingStatsActivity.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "activities/settings/TextSettingsActivity.h"
@@ -173,8 +175,7 @@ EpubReaderActivity::~EpubReaderActivity() {
                                           ? static_cast<float>(std::clamp(progressPage, 0, progressPageCount)) /
                                                 static_cast<float>(progressPageCount)
                                           : 0.0f;
-        const int rounded =
-            static_cast<int>(epub->calculateProgress(progressSpine, chapterProgress) * 100.0f + 0.5f);
+        const int rounded = static_cast<int>(epub->calculateProgress(progressSpine, chapterProgress) * 100.0f + 0.5f);
         percent = std::clamp(rounded, 0, 99);
       }
     }
@@ -423,7 +424,7 @@ void EpubReaderActivity::loop() {
     }
 
     if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
-      pageTurn(true);
+      if (pageTurn(true)) READING_STATS.recordPageTurn(true);
       requestUpdate();
       return;
     }
@@ -797,6 +798,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               jumpToPercent(std::get<PercentResult>(result.data).percent);
             }
           });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::STATISTICS: {
+      int progress = 0;
+      if (epub && epub->getBookSize() > 0 && section && section->pageCount > 0) {
+        const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+        progress = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f);
+      }
+      startActivityForResult(
+          std::make_unique<ReadingStatsActivity>(renderer, mappedInput, epub->getPath(), epub->getTitle(),
+                                                 static_cast<uint8_t>(std::clamp(progress, 0, 100))),
+          [this](const ActivityResult&) { openReaderMenu(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {

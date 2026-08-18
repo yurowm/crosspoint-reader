@@ -10,11 +10,13 @@
 #include "BookCoverActivity.h"
 #include "LibraryBookStateStore.h"
 #include "MappedInputManager.h"
+#include "ReadingStats.h"
+#include "activities/reader/ReadingStatsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-constexpr int ACTION_COUNT = 4;
+constexpr int ACTION_COUNT = 5;
 
 std::string displaySeriesIndex(std::string index) {
   const size_t decimalPoint = index.find('.');
@@ -89,7 +91,19 @@ void LibraryBookMenuActivity::activateSelection() {
     if (!LibraryIndex::setProgressState(book.path, book.progressPercent, book.started)) {
       LOG_ERR("LBM", "Failed to update progress state for %s", book.path.c_str());
     }
+    ReadingStats::setBookFinished(book.path, markAsRead);
     requestUpdate();
+    return;
+  }
+
+  if (selectorIndex == 3) {
+    auto stats =
+        makeUniqueNoThrow<ReadingStatsActivity>(renderer, mappedInput, book.path, book.title, book.progressPercent);
+    if (!stats) {
+      LOG_ERR("LBM", "OOM: ReadingStatsActivity");
+      return;
+    }
+    startActivityForResult(std::move(stats), nullptr);
     return;
   }
 
@@ -167,12 +181,14 @@ void LibraryBookMenuActivity::render(RenderLock&&) {
           return std::string(book.started && book.progressPercent == 100 ? tr(STR_MARK_AS_UNREAD)
                                                                          : tr(STR_MARK_AS_READ));
         }
+        if (index == 3) return std::string(tr(STR_BOOK_STATS));
         return std::string(tr(STR_VIEW_BOOK_COVER));
       },
       [this](const int index) {
         if (index == 0) return ReadBook;
         if (index == 1) return book.deferred ? DeferredOff : Deferred;
         if (index == 2) return book.started && book.progressPercent == 100 ? MarkUnread : MarkRead;
+        if (index == 3) return Book;
         return BookCover;
       });
 

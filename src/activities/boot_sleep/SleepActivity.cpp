@@ -23,6 +23,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "ReadingStats.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -449,11 +450,43 @@ bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind
   return true;
 }
 
-bool drawSleepPopupPreservingFrame(GfxRenderer& renderer) {
+Rect drawSleepTransitionPopup(GfxRenderer& renderer, const uint32_t sessionSeconds) {
+  if (sessionSeconds == 0) return GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  char duration[32];
+  ReadingStats::formatDuration(sessionSeconds, duration, sizeof(duration));
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int titleHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int width = std::max({renderer.getTextWidth(UI_12_FONT_ID, tr(STR_ENTERING_SLEEP), EpdFontFamily::BOLD),
+                              renderer.getTextWidth(UI_10_FONT_ID, tr(STR_I_READ)),
+                              renderer.getTextWidth(UI_12_FONT_ID, duration, EpdFontFamily::BOLD)}) +
+                    metrics.popupMarginX * 2;
+  const int height = titleHeight + lineHeight + titleHeight + metrics.popupMarginY * 4;
+  const int x = (renderer.getScreenWidth() - width) / 2;
+  const int y = static_cast<int>(renderer.getScreenHeight() * metrics.popupTopOffsetRatio);
+  const int frame = metrics.popupFrameThickness;
+  renderer.fillRoundedRect(x - frame, y - frame, width + frame * 2, height + frame * 2,
+                           metrics.popupCornerRadius + frame, Color::White);
+  renderer.fillRoundedRect(x, y, width, height, metrics.popupCornerRadius, Color::Black);
+  int textY = y + metrics.popupMarginY;
+  renderer.drawCenteredText(UI_12_FONT_ID, textY, tr(STR_ENTERING_SLEEP), metrics.popupTextInverted,
+                            EpdFontFamily::BOLD);
+  textY += titleHeight + metrics.popupMarginY;
+  renderer.drawCenteredText(UI_10_FONT_ID, textY, tr(STR_I_READ), metrics.popupTextInverted);
+  textY += lineHeight + metrics.popupMarginY;
+  renderer.drawCenteredText(UI_12_FONT_ID, textY, duration, metrics.popupTextInverted, EpdFontFamily::BOLD);
+  renderer.displayBuffer();
+  return Rect{x, y, width, height};
+}
+
+bool drawSleepPopupPreservingFrame(GfxRenderer& renderer, const uint32_t sessionSeconds) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int frameThickness = metrics.popupFrameThickness;
   const int popupY = static_cast<int>(renderer.getScreenHeight() * metrics.popupTopOffsetRatio);
-  const int popupHeight = renderer.getLineHeight(UI_12_FONT_ID) + metrics.popupMarginY * 2;
+  const int popupHeight = sessionSeconds == 0 ? renderer.getLineHeight(UI_12_FONT_ID) + metrics.popupMarginY * 2
+                                              : renderer.getLineHeight(UI_12_FONT_ID) * 2 +
+                                                    renderer.getLineHeight(UI_10_FONT_ID) + metrics.popupMarginY * 4;
   const int bandTop = std::max(0, popupY - frameThickness);
   const int bandBottom = std::min(renderer.getScreenHeight(), popupY + popupHeight + frameThickness);
   const int bandHeight = bandBottom - bandTop;
@@ -469,7 +502,7 @@ bool drawSleepPopupPreservingFrame(GfxRenderer& renderer) {
     return false;
   }
 
-  GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  drawSleepTransitionPopup(renderer, sessionSeconds);
   if (!renderer.copyBufferToRegion(0, bandTop, renderer.getScreenWidth(), bandHeight, savedBand.get(), bandBytes)) {
     LOG_ERR("SLP", "Failed to restore sleep popup background");
     return false;
@@ -491,6 +524,7 @@ void SleepActivity::onEnter() {
   Activity::onEnter();
 
   const bool frameWasInverted = display.isInverted();
+  const uint32_t sessionSeconds = READING_STATS.finishSessionForSleep();
 
   // Sleep screens always use normal polarity. This activity draws directly
   // from onEnter (outside ActivityManager's per-render polarity resolution),
@@ -514,7 +548,7 @@ void SleepActivity::onEnter() {
     if (APP_STATE.lastSleepFromReader) {
       ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
     }
-    drawSleepPopupPreservingFrame(renderer);
+    drawSleepPopupPreservingFrame(renderer, sessionSeconds);
     if (APP_STATE.lastSleepFromReader) {
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
     }
@@ -525,10 +559,10 @@ void SleepActivity::onEnter() {
   // Show popup with reader orientation only when going to sleep from reader
   if (APP_STATE.lastSleepFromReader) {
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    drawSleepTransitionPopup(renderer, sessionSeconds);
     renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   } else {
-    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    drawSleepTransitionPopup(renderer, sessionSeconds);
   }
 
   switch (SETTINGS.sleepScreen) {

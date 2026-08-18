@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <Utf8.h>
 #include <Xtc.h>
 
@@ -18,6 +19,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "activities/reader/ReadingStatsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -100,7 +102,7 @@ ButtonHint homeButtonHint(const MappedInputManager::NavigationAction action) {
 }  // namespace
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // Library, Deferred, File transfer, Settings
+  int count = 5;  // Library, Deferred, File transfer, Statistics, Settings
   if (!recentBooks.empty()) {
     count++;  // Continue Reading
   }
@@ -302,6 +304,9 @@ void HomeActivity::loop() {
       case HomeMenuItem::FILE_TRANSFER:
         onFileTransferOpen();
         break;
+      case HomeMenuItem::STATISTICS:
+        onStatisticsOpen();
+        break;
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
         break;
@@ -414,8 +419,8 @@ void HomeActivity::render(RenderLock&&) {
 
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_LIBRARY), tr(STR_DEFERRED_BOOKS), tr(STR_FILE_TRANSFER),
-                                        tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Library, Deferred, Transfer, Settings};
+                                        tr(STR_READING_STATS), tr(STR_SETTINGS_TITLE)};
+  std::vector<UIIcon> menuIcons = {Library, Deferred, Transfer, Book, Settings};
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
@@ -459,5 +464,14 @@ void HomeActivity::onDeferredOpen() { activityManager.goToDeferredBooks(); }
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
+
+void HomeActivity::onStatisticsOpen() {
+  auto stats = makeUniqueNoThrow<ReadingStatsActivity>(renderer, mappedInput);
+  if (!stats) {
+    LOG_ERR("HOME", "OOM: ReadingStatsActivity");
+    return;
+  }
+  startActivityForResult(std::move(stats), nullptr);
+}
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
