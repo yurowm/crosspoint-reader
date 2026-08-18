@@ -101,6 +101,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          NOTES_FILE=".github/release-notes/${VERSION}.md"
+          if [ ! -f "${NOTES_FILE}" ]; then
+            echo "Missing release notes: ${NOTES_FILE}" >&2
+            exit 1
+          fi
           gh release delete "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
             --yes 2>/dev/null || true
@@ -108,5 +113,5 @@ jobs:
             release/firmware.bin \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${VERSION}" \
-            --generate-notes \
+            --notes-file "${NOTES_FILE}" \
             --verify-tag
