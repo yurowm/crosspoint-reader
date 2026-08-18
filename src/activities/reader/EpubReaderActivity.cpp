@@ -551,7 +551,7 @@ void EpubReaderActivity::loop() {
     }
     const bool forward = pendingManualTurn > 0;
     pendingManualTurn = 0;
-    pageTurn(forward);
+    if (pageTurn(forward)) READING_STATS.recordPageTurn(forward);
     requestUpdate();
     return;
   }
@@ -576,7 +576,7 @@ void EpubReaderActivity::loop() {
   }
 
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
-    skipPages(nextTriggered ? 1 : -1);
+    if (skipPages(nextTriggered ? 1 : -1)) READING_STATS.recordPageTurn(nextTriggered);
     requestUpdate();
     return;
   }
@@ -601,9 +601,9 @@ void EpubReaderActivity::loop() {
   }
 
   if (prevTriggered) {
-    pageTurn(false);
+    if (pageTurn(false)) READING_STATS.recordPageTurn(false);
   } else {
-    pageTurn(true);
+    if (pageTurn(true)) READING_STATS.recordPageTurn(true);
   }
   requestUpdate();
 }

@@ -537,6 +537,13 @@ void SleepActivity::onEnter() {
        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
 
   if (renderQuickResume) {
+    if (APP_STATE.lastSleepFromReader) {
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    }
+    if (drawSleepPopupPreservingFrame(renderer, sessionSeconds)) delay(1200);
+    if (APP_STATE.lastSleepFromReader) {
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+    }
     return renderLastScreenSleepScreen();
   }
 
