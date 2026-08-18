@@ -74,7 +74,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
     return NO_UPDATE;
   }
 
-  latestVersion = releaseParser.getTagName();
+  const char* releaseTag = releaseParser.getTagName();
+  const char* tagSeparator = strrchr(releaseTag, '/');
+  latestVersion = tagSeparator != nullptr ? tagSeparator + 1 : releaseTag;
   otaUrl = releaseParser.getFirmwareUrl();
   otaSize = releaseParser.getFirmwareSize();
   totalSize = otaSize;
