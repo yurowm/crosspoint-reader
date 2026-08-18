@@ -8,10 +8,13 @@
 #include <Utf8.h>
 #include <ZipFile.h>
 
+#include <limits>
+
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
+#include "Epub/parsers/VisibleTextCounter.h"
 
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   const auto containerPath = "META-INF/container.xml";
@@ -865,6 +868,40 @@ bool Epub::extractItemToFile(const std::string& itemHref, const std::string& des
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
   return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
+}
+
+bool Epub::countVisibleCharacters(uint32_t& count) const {
+  count = 0;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    LOG_ERR("EBP", "Cannot count text without a loaded spine");
+    return false;
+  }
+
+  VisibleTextCounter counter;
+  uint64_t total = 0;
+  const int spineCount = getSpineItemsCount();
+  for (int i = 0; i < spineCount; i++) {
+    const auto item = getSpineItem(i);
+    size_t itemSize = 0;
+    if (!getItemSize(item.href, &itemSize)) {
+      LOG_ERR("EBP", "Could not size spine item %d", i);
+      return false;
+    }
+    if (itemSize == 0) continue;
+
+    if (!counter.begin(itemSize) || !readItemContentsToStream(item.href, counter, 1024)) {
+      LOG_ERR("EBP", "Could not count visible text in spine item %d", i);
+      return false;
+    }
+    total += counter.getCharacterCount();
+    if (total >= std::numeric_limits<uint32_t>::max()) {
+      count = std::numeric_limits<uint32_t>::max();
+      return true;
+    }
+  }
+
+  count = static_cast<uint32_t>(total);
+  return true;
 }
 
 int Epub::getSpineItemsCount() const {

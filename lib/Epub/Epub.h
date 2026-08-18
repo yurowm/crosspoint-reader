@@ -72,6 +72,9 @@ class Epub {
   // Extract an item to a file on SD. On failure the partial file is removed.
   bool extractItemToFile(const std::string& itemHref, const std::string& destPath) const;
   bool getItemSize(const std::string& itemHref, size_t* size) const;
+  // Streams every spine XHTML document through a text-only parser. The parser
+  // retains only a 32-bit Unicode-codepoint count, never the book text.
+  bool countVisibleCharacters(uint32_t& count) const;
   BookMetadataCache::SpineEntry getSpineItem(int spineIndex) const;
   BookMetadataCache::TocEntry getTocItem(int tocIndex) const;
   int getSpineItemsCount() const;

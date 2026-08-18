@@ -5,6 +5,8 @@
 #include <Logging.h>
 #include <Memory.h>
 
+#include <cstdio>
+
 #include "BookCoverActivity.h"
 #include "LibraryBookStateStore.h"
 #include "MappedInputManager.h"
@@ -50,6 +52,13 @@ void LibraryBookMenuActivity::buildDisplayMetadata() {
   for (const auto& tag : book.tags) {
     if (!tagsText.empty()) tagsText += ", ";
     tagsText += tag;
+  }
+
+  pageCountText.clear();
+  if (estimatedPageCount > 0) {
+    char buffer[32] = {};
+    snprintf(buffer, sizeof(buffer), tr(STR_BOOK_PAGE_COUNT_FORMAT), static_cast<unsigned>(estimatedPageCount));
+    pageCountText = buffer;
   }
 }
 
@@ -132,7 +141,7 @@ void LibraryBookMenuActivity::render(RenderLock&&) {
   constexpr int detailGap = 4;
   const int detailLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const int detailWidth = pageWidth - metrics.contentSidePadding * 2;
-  const std::string* details[] = {&book.author, &seriesText, &book.year, &tagsText};
+  const std::string* details[] = {&book.author, &seriesText, &book.year, &tagsText, &pageCountText};
   int detailY = contentTop;
   int visibleDetails = 0;
   for (const std::string* detail : details) {

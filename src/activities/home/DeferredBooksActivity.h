@@ -10,6 +10,7 @@ class DeferredBooksActivity final : public Activity {
   std::vector<LibraryBook> books;
   size_t selectorIndex = 0;
   uint32_t lastNavigationRepeatTime = 0;
+  uint32_t estimatedCharactersPerPage = 0;
   bool navigationRepeated = false;
   bool lockConfirmRelease = false;
 

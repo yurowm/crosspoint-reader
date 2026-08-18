@@ -24,6 +24,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookPageEstimator.h"
 
 namespace {
 constexpr int DIRECTORY_STACK_RESERVE = 16;
@@ -177,11 +178,10 @@ LibraryBook LibraryActivity::loadBook(const LibraryFileInfo& file) {
   if (FsHelpers::hasEpubExtension(file.path)) {
     Epub epub(file.path, "/.crosspoint");
     const bool hasProgress = Storage.exists((epub.getCachePath() + "/progress.bin").c_str());
-    // Started books need cumulative spine sizes to convert their saved chapter
-    // position to a whole-book percentage. Everything else takes the metadata-
-    // only path and skips the spine/TOC pass entirely.
-    const bool loadedForProgress = hasProgress && epub.load(/*buildIfMissing=*/false, /*skipLoadingCss=*/true);
-    if (loadedForProgress || epub.loadMetadata()) {
+    // A full spine is required once for the streaming visible-character count.
+    // Unchanged books reuse the count from library.idx on later scans.
+    const bool loadedWithSpine = epub.load(/*buildIfMissing=*/true, /*skipLoadingCss=*/true);
+    if (loadedWithSpine || epub.loadMetadata()) {
       if (!epub.getTitle().empty()) book.title = epub.getTitle();
       book.author = epub.getAuthor();
       book.authors = epub.getAuthors();
@@ -196,7 +196,12 @@ LibraryBook LibraryActivity::loadBook(const LibraryFileInfo& file) {
       if (Storage.exists(thumb.c_str())) {
         book.coverBmpPath = thumb;
       }
-      if (loadedForProgress) {
+      if (loadedWithSpine) {
+        if (!epub.countVisibleCharacters(book.visibleCharacterCount)) {
+          book.visibleCharacterCount = 0;
+        }
+      }
+      if (loadedWithSpine && hasProgress) {
         book.started = readEpubProgress(epub, book.progressPercent);
       }
     }
@@ -338,6 +343,7 @@ bool LibraryActivity::scanLibrary(const bool indexLoaded) {
 void LibraryActivity::onEnter() {
   Activity::onEnter();
   selectorIndex = 0;
+  estimatedCharactersPerPage = BookPageEstimator::charactersPerPage(renderer);
   LibraryViewStateFile::load(viewState);
   lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
   indexDirty = false;
@@ -483,7 +489,9 @@ void LibraryActivity::openFilters() {
 
 void LibraryActivity::openBookMenu(LibraryBook& book) {
   rememberSelectedBook();
-  auto menu = makeUniqueNoThrow<LibraryBookMenuActivity>(renderer, mappedInput, book);
+  const uint32_t estimatedPages =
+      BookPageEstimator::pageCount(book.visibleCharacterCount, estimatedCharactersPerPage);
+  auto menu = makeUniqueNoThrow<LibraryBookMenuActivity>(renderer, mappedInput, book, estimatedPages);
   if (!menu) {
     LOG_ERR("LIB", "OOM: LibraryBookMenuActivity");
     return;
@@ -664,7 +672,10 @@ void LibraryActivity::render(RenderLock&&) {
         const bool selected = index == static_cast<int>(selectorIndex);
 
         const LibraryBook& book = books[bookIndices[index]];
-        BookListItem::draw(renderer, book, contentSidePadding, rowY, rowWidth, rowHeight, selected, false);
+        const uint32_t estimatedPages =
+            BookPageEstimator::pageCount(book.visibleCharacterCount, estimatedCharactersPerPage);
+        BookListItem::draw(renderer, book, contentSidePadding, rowY, rowWidth, rowHeight, selected, false,
+                           estimatedPages);
       }
     }
   }

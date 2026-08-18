@@ -10,7 +10,7 @@
 #include <utility>
 
 namespace {
-constexpr std::array<uint8_t, 5> HEADER = {'L', 'I', 'D', 'X', 2};
+constexpr std::array<uint8_t, 5> HEADER = {'L', 'I', 'D', 'X', 3};
 constexpr const char* TMP_FILE_PATH = "/.crosspoint/library.idx.tmp";
 constexpr uint32_t MAX_BOOKS = 4096;
 constexpr uint32_t MAX_STRING_BYTES = 16 * 1024;
@@ -76,7 +76,7 @@ bool readBook(HalFile& file, LibraryBook& book) {
                   readString(file, book.author) && readStringList(file, book.authors) &&
                   readString(file, book.series) && readString(file, book.seriesIndex) && readString(file, book.year) &&
                   readStringList(file, book.tags) && readString(file, book.coverBmpPath) &&
-                  readPod(file, book.progressPercent) && readPod(file, started);
+                  readPod(file, book.visibleCharacterCount) && readPod(file, book.progressPercent) && readPod(file, started);
   if (!ok) return false;
   book.started = started != 0;
   return !book.path.empty() && book.path.front() == '/';
@@ -88,7 +88,7 @@ bool writeBook(HalFile& file, const LibraryBook& book) {
          writeString(file, book.path) && writeString(file, book.title) && writeString(file, book.author) &&
          writeStringList(file, book.authors) && writeString(file, book.series) && writeString(file, book.seriesIndex) &&
          writeString(file, book.year) && writeStringList(file, book.tags) && writeString(file, book.coverBmpPath) &&
-         writePod(file, book.progressPercent) && writePod(file, started);
+         writePod(file, book.visibleCharacterCount) && writePod(file, book.progressPercent) && writePod(file, started);
 }
 }  // namespace
 

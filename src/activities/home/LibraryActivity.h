@@ -15,6 +15,7 @@ class LibraryActivity final : public Activity {
   size_t scannedBookCount = 0;
   size_t totalBookCount = 0;
   uint32_t lastNavigationRepeatTime = 0;
+  uint32_t estimatedCharactersPerPage = 0;
   LibraryViewState viewState;
   bool scanning = false;
   bool lockLongPressBack = false;

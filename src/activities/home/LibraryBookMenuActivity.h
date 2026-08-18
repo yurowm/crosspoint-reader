@@ -12,6 +12,8 @@ class LibraryBookMenuActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   std::string seriesText;
   std::string tagsText;
+  std::string pageCountText;
+  uint32_t estimatedPageCount;
   size_t selectorIndex = 0;
   bool lockConfirmRelease = false;
 
@@ -19,8 +21,9 @@ class LibraryBookMenuActivity final : public Activity {
   void buildDisplayMetadata();
 
  public:
-  LibraryBookMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, LibraryBook& book)
-      : Activity("LibraryBookMenu", renderer, mappedInput), book(book) {}
+  LibraryBookMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, LibraryBook& book,
+                          uint32_t estimatedPageCount)
+      : Activity("LibraryBookMenu", renderer, mappedInput), book(book), estimatedPageCount(estimatedPageCount) {}
 
   void onEnter() override;
   void loop() override;

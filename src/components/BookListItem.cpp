@@ -18,6 +18,8 @@ constexpr int TEXT_HORIZONTAL_INSET = 8;
 constexpr int TEXT_GAP = 14;
 constexpr int PROGRESS_ICON_SIZE = 20;
 constexpr int PROGRESS_GAP = 4;
+constexpr int TOP_INDICATOR_GAP = 4;
+constexpr int DEFERRED_ICON_SIZE = 20;
 constexpr float TITLE_LINE_SPACING = 0.5f;
 constexpr size_t TITLE_LINE_BUFFER_SIZE = 192;
 constexpr char ELLIPSIS[] = "\xe2\x80\xa6";
@@ -141,7 +143,7 @@ int drawCover(GfxRenderer& renderer, const LibraryBook& book, const int x, const
 }
 
 int draw(GfxRenderer& renderer, const LibraryBook& book, const int x, const int y, const int width, const int height,
-         const bool selected, const bool showCover) {
+         const bool selected, const bool showCover, const uint32_t pageCount) {
   if (selected) {
     renderer.fillRoundedRect(x, y, width, height, 5, Color::LightGray);
   }
@@ -159,18 +161,32 @@ int draw(GfxRenderer& renderer, const LibraryBook& book, const int x, const int 
   const int textX = showCover ? x + itemCoverWidth + TEXT_GAP : x + TEXT_HORIZONTAL_INSET;
   const int textRight = x + width - TEXT_HORIZONTAL_INSET;
   const int textWidth = std::max(0, textRight - textX);
-  constexpr int deferredIconSize = 20;
-  constexpr int deferredIconGap = 4;
-  const int titleWidth =
-      book.deferred ? std::max(0, textWidth - deferredIconSize - deferredIconGap) : textWidth;
   const int verticalInset = showCover ? TEXT_VERTICAL_INSET : 4;
   const int detailGap = showCover ? 5 : 1;
   const int titleY = y + verticalInset;
+  char pageText[12] = {};
+  int pageWidth = 0;
+  if (pageCount > 0) {
+    snprintf(pageText, sizeof(pageText), "%u", static_cast<unsigned>(pageCount));
+    pageWidth = renderer.getTextWidth(SMALL_FONT_ID, pageText);
+  }
+  const int indicatorCount = (pageCount > 0 ? 1 : 0) + (book.deferred ? 1 : 0);
+  const int trailingWidth = pageWidth + (book.deferred ? DEFERRED_ICON_SIZE : 0) +
+                            std::max(0, indicatorCount - 1) * TOP_INDICATOR_GAP;
+  const int titleWidth = trailingWidth > 0 ? std::max(0, textWidth - trailingWidth - TOP_INDICATOR_GAP) : textWidth;
   const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int titleLineStep = std::max(1, renderer.getLineHeight(UI_12_FONT_ID, TITLE_LINE_SPACING));
   const int titleLineCount = drawTitle(renderer, book.title, textX, titleY, titleWidth, titleLineStep);
+
+  int indicatorRight = textRight;
+  if (pageCount > 0) {
+    indicatorRight -= pageWidth;
+    renderer.drawText(SMALL_FONT_ID, indicatorRight, titleY, pageText);
+    indicatorRight -= TOP_INDICATOR_GAP;
+  }
   if (book.deferred) {
-    drawUIIcon(renderer, Deferred, textRight - deferredIconSize, titleY, deferredIconSize);
+    indicatorRight -= DEFERRED_ICON_SIZE;
+    drawUIIcon(renderer, Deferred, indicatorRight, titleY, DEFERRED_ICON_SIZE);
   }
   const int authorY = titleY + titleLineHeight + (titleLineCount - 1) * titleLineStep + detailGap;
   if (!book.author.empty()) {

@@ -14,6 +14,7 @@ struct LibraryBook {
   std::string year;
   std::vector<std::string> tags;
   std::string coverBmpPath;
+  uint32_t visibleCharacterCount = 0;
   uint64_t fileSize = 0;
   uint16_t modifiedDate = 0;
   uint16_t modifiedTime = 0;

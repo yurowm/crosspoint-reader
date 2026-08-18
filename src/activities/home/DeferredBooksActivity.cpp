@@ -13,6 +13,7 @@
 #include "components/BookListItem.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookPageEstimator.h"
 
 namespace {
 constexpr unsigned long CONFIRM_HOLD_MS = 1000;
@@ -70,6 +71,7 @@ void DeferredBooksActivity::loadBooks() {
 void DeferredBooksActivity::onEnter() {
   Activity::onEnter();
   selectorIndex = 0;
+  estimatedCharactersPerPage = BookPageEstimator::charactersPerPage(renderer);
   lockConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
   if (LIBRARY_BOOK_STATE.pruneMissing() && !LIBRARY_BOOK_STATE.saveToFile()) {
     LOG_ERR("DBA", "Failed to persist deferred-book cleanup");
@@ -86,7 +88,10 @@ void DeferredBooksActivity::onExit() {
 void DeferredBooksActivity::openBookMenu() {
   if (books.empty()) return;
   lockConfirmRelease = true;
-  auto menu = makeUniqueNoThrow<LibraryBookMenuActivity>(renderer, mappedInput, books[selectorIndex]);
+  const uint32_t estimatedPages =
+      BookPageEstimator::pageCount(books[selectorIndex].visibleCharacterCount, estimatedCharactersPerPage);
+  auto menu =
+      makeUniqueNoThrow<LibraryBookMenuActivity>(renderer, mappedInput, books[selectorIndex], estimatedPages);
   if (!menu) {
     LOG_ERR("DBA", "OOM: LibraryBookMenuActivity");
     lockConfirmRelease = false;
@@ -201,8 +206,10 @@ void DeferredBooksActivity::render(RenderLock&&) {
                                 index < pageStart + BookListItem::ITEMS_PER_PAGE;
          ++index) {
       const int rowY = contentTop + (index - pageStart) * (rowHeight + BookListItem::ROW_GAP);
+      const uint32_t estimatedPages =
+          BookPageEstimator::pageCount(books[index].visibleCharacterCount, estimatedCharactersPerPage);
       BookListItem::draw(renderer, books[index], sidePadding, rowY, rowWidth, rowHeight,
-                         index == static_cast<int>(selectorIndex), false);
+                         index == static_cast<int>(selectorIndex), false, estimatedPages);
     }
   }
 

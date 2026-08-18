@@ -15,6 +15,6 @@ static constexpr int DEFAULT_COVER_CACHE_HEIGHT = 140;
 int rowHeight(int contentHeight);
 int drawCover(GfxRenderer& renderer, const LibraryBook& book, int x, int y, int maxWidth, int height);
 int draw(GfxRenderer& renderer, const LibraryBook& book, int x, int y, int width, int height, bool selected,
-         bool showCover = true);
+         bool showCover = true, uint32_t pageCount = 0);
 
 }  // namespace BookListItem
