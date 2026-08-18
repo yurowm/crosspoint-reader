@@ -157,6 +157,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
             book.coverBmpPath = "";
           }
+          freeCoverBuffer();
           coverRendered = false;
           requestUpdate();
         } else if (FsHelpers::hasXtcExtension(book.path)) {
@@ -174,6 +175,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
               book.coverBmpPath = "";
             }
+            freeCoverBuffer();
             coverRendered = false;
             requestUpdate();
           }
