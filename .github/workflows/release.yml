@@ -3,7 +3,8 @@ name: Compile Release
 # Builds every board's release firmware on tag push, with the .bin named
 # exactly as OtaUpdater requests it from the GitHub release: plain
 # firmware.bin for the C3 X4/X3 binary, firmware-<board>.bin for every other
-# board. Attach the artifacts' .bin files to the release as-is.
+# board. After every build succeeds, publish those binaries in a GitHub Release
+# so the firmware's OTA updater can discover them through releases/latest.
 
 on:
   push:
@@ -81,3 +82,49 @@ jobs:
             .pio/build/${{ matrix.pio_env }}/firmware.elf
             .pio/build/${{ matrix.pio_env }}/firmware.map
             .pio/build/${{ matrix.pio_env }}/partitions.bin
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate release version
+        run: |
+          VERSION=$(sed -n 's/^version = //p' platformio.ini | head -n 1)
+          if [ "${GITHUB_REF_NAME}" != "${VERSION}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match firmware version ${VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: firmware*.bin
+          path: dist
+
+      - name: Stage OTA assets
+        run: |
+          mkdir release
+          for ASSET in firmware.bin firmware-sticky.bin firmware-x4pro.bin firmware-papermono.bin; do
+            SOURCE=$(find dist -type f -name "${ASSET}" -print -quit)
+            if [ -z "${SOURCE}" ]; then
+              echo "Missing release asset: ${ASSET}" >&2
+              exit 1
+            fi
+            cp "${SOURCE}" "release/${ASSET}"
+          done
+
+      - name: Publish release for OTA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            release/*.bin \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag

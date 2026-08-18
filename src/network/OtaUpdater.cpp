@@ -19,7 +19,19 @@
 #include "FirmwareFlasher.h"
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
+constexpr char latestReleaseUrl[] = "https://api.github.com/repos/yurowm/crosspoint-reader/releases/latest";
+
+struct FirmwareVersion {
+  int major = 0;
+  int minor = 0;
+  int patch = 0;
+  int subversion = 0;
+};
+
+bool parseFirmwareVersion(const char* value, FirmwareVersion& version) {
+  const int matched = sscanf(value, "%d.%d.%d-%d", &version.major, &version.minor, &version.patch, &version.subversion);
+  return matched >= 3;
+}
 }  // namespace
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
@@ -78,33 +90,18 @@ bool OtaUpdater::isUpdateNewer() const {
     return false;
   }
 
-  int currentMajor, currentMinor, currentPatch;
-  int latestMajor, latestMinor, latestPatch;
-
   const auto currentVersion = CROSSPOINT_VERSION;
+  FirmwareVersion current;
+  FirmwareVersion latest;
+  if (!parseFirmwareVersion(currentVersion, current) || !parseFirmwareVersion(latestVersion.c_str(), latest)) {
+    LOG_ERR("OTA", "Invalid firmware version (current=%s latest=%s)", currentVersion, latestVersion.c_str());
+    return false;
+  }
 
-  // semantic version check (only match on 3 segments)
-  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
-
-  /*
-   * Compare major versions.
-   * If they differ, return true if latest major version greater than current major version
-   * otherwise return false.
-   */
-  if (latestMajor != currentMajor) return latestMajor > currentMajor;
-
-  /*
-   * Compare minor versions.
-   * If they differ, return true if latest minor version greater than current minor version
-   * otherwise return false.
-   */
-  if (latestMinor != currentMinor) return latestMinor > currentMinor;
-
-  /*
-   * Check patch versions.
-   */
-  if (latestPatch != currentPatch) return latestPatch > currentPatch;
+  if (latest.major != current.major) return latest.major > current.major;
+  if (latest.minor != current.minor) return latest.minor > current.minor;
+  if (latest.patch != current.patch) return latest.patch > current.patch;
+  if (latest.subversion != current.subversion) return latest.subversion > current.subversion;
 
   // If we reach here, it means all segments are equal.
   // One final check, if we're on an RC build (contains "-rc"), we should consider the latest version as newer even if
