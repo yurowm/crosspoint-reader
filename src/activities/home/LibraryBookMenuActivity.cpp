@@ -97,8 +97,8 @@ void LibraryBookMenuActivity::activateSelection() {
   }
 
   if (selectorIndex == 3) {
-    auto stats =
-        makeUniqueNoThrow<ReadingStatsActivity>(renderer, mappedInput, book.path, book.title, book.progressPercent);
+    auto stats = makeUniqueNoThrow<ReadingStatsActivity>(renderer, mappedInput, book.path, book.title,
+                                                         book.progressPercent, estimatedPageCount);
     if (!stats) {
       LOG_ERR("LBM", "OOM: ReadingStatsActivity");
       return;
@@ -188,7 +188,7 @@ void LibraryBookMenuActivity::render(RenderLock&&) {
         if (index == 0) return ReadBook;
         if (index == 1) return book.deferred ? DeferredOff : Deferred;
         if (index == 2) return book.started && book.progressPercent == 100 ? MarkUnread : MarkRead;
-        if (index == 3) return Book;
+        if (index == 3) return Statistics;
         return BookCover;
       });
 

@@ -132,6 +132,7 @@ enum UIIcon {
   Text,
   Image,
   Book,
+  Statistics,
   File,
   Recent,
   Deferred,

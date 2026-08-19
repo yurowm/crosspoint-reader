@@ -16,12 +16,15 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "LibraryIndex.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "ReadingStats.h"
 #include "RecentBooksStore.h"
 #include "activities/reader/ReadingStatsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookPageEstimator.h"
 
 namespace {
 uint16_t readLe16(const uint8_t* data) { return static_cast<uint16_t>(data[0] | (data[1] << 8)); }
@@ -38,6 +41,25 @@ std::string displaySeriesIndex(std::string index) {
     index.erase(decimalPoint);
   }
   return index;
+}
+
+struct PageCountLookup {
+  const std::string& path;
+  uint32_t charactersPerPage;
+  uint32_t pageCount = 0;
+};
+
+bool findPageCount(const LibraryBook& book, void* context) {
+  auto& lookup = *static_cast<PageCountLookup*>(context);
+  if (book.path != lookup.path) return true;
+  lookup.pageCount = BookPageEstimator::pageCount(book.visibleCharacterCount, lookup.charactersPerPage);
+  return false;
+}
+
+uint32_t estimatedPageCount(const GfxRenderer& renderer, const std::string& path) {
+  PageCountLookup lookup{path, BookPageEstimator::charactersPerPage(renderer)};
+  LibraryIndex::visitBooks(findPageCount, &lookup);
+  return lookup.pageCount;
 }
 
 bool readEpubProgress(const Epub& epub, uint8_t& progressPercent) {
@@ -218,6 +240,14 @@ void HomeActivity::loadCurrentBookDetails() {
     if (!xtc.getTitle().empty()) book.title = xtc.getTitle();
     if (!xtc.getAuthor().empty()) book.author = xtc.getAuthor();
     book.started = readXtcProgress(xtc, book.progressPercent);
+  }
+
+  if (book.started) {
+    ReadingStatsData stats;
+    if (ReadingStats::loadBook(book.path, stats)) {
+      book.remainingReadingSeconds =
+          ReadingStats::remainingSeconds(stats, book.progressPercent, estimatedPageCount(renderer, book.path));
+    }
   }
 }
 
@@ -420,7 +450,7 @@ void HomeActivity::render(RenderLock&&) {
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_LIBRARY), tr(STR_DEFERRED_BOOKS), tr(STR_FILE_TRANSFER),
                                         tr(STR_READING_STATS), tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Library, Deferred, Transfer, Book, Settings};
+  std::vector<UIIcon> menuIcons = {Library, Deferred, Transfer, Statistics, Settings};
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));

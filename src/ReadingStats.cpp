@@ -14,8 +14,11 @@ namespace {
 constexpr char STATS_DIR[] = "/.crosspoint/reading-stats";
 constexpr char GLOBAL_PATH[] = "/.crosspoint/reading-stats/global.bin";
 constexpr uint32_t MAGIC = 0x53545243;  // CRTS
-constexpr uint8_t VERSION = 1;
-constexpr size_t WIRE_SIZE = 30;
+constexpr uint8_t VERSION = 2;
+constexpr size_t V1_WIRE_SIZE = 30;
+constexpr size_t WIRE_SIZE = 52;
+constexpr uint32_t MIN_VALID_PAGE_SECONDS = 5;
+constexpr uint32_t MAX_VALID_PAGE_SECONDS = 2 * 60;
 
 uint64_t pathHash(const std::string& path) {
   uint64_t hash = 1469598103934665603ULL;
@@ -56,17 +59,31 @@ bool loadFile(const char* path, ReadingStatsData& stats) {
   HalFile file;
   if (!Storage.openFileForRead("RSTAT", path, file)) return false;
   std::array<uint8_t, WIRE_SIZE> data{};
-  if (file.read(data.data(), data.size()) != static_cast<int>(data.size()) || read32(data.data()) != MAGIC ||
-      data[4] != VERSION || read32(data.data() + WIRE_SIZE - 4) != checksum(data.data(), WIRE_SIZE - 4)) {
+  const int bytesRead = file.read(data.data(), data.size());
+  if (bytesRead < 5 || read32(data.data()) != MAGIC) {
     LOG_ERR("RSTAT", "Invalid stats file: %s", path);
     return false;
   }
+
+  const uint8_t version = data[4];
+  const size_t wireSize = version == 1 ? V1_WIRE_SIZE : version == VERSION ? WIRE_SIZE : 0;
+  if (wireSize == 0 || bytesRead != static_cast<int>(wireSize) ||
+      read32(data.data() + wireSize - 4) != checksum(data.data(), wireSize - 4)) {
+    LOG_ERR("RSTAT", "Invalid stats file: %s", path);
+    return false;
+  }
+
   stats.sessions = read32(data.data() + 5);
   stats.readingSeconds = read32(data.data() + 9);
   stats.forwardPages = read32(data.data() + 13);
   stats.lastSessionSeconds = read32(data.data() + 17);
   stats.completedBooks = read32(data.data() + 21);
   stats.finished = data[25] != 0;
+  if (version >= 2) {
+    stats.pageSampleCount = std::min<uint8_t>(data[26], ReadingStatsData::SPEED_SAMPLE_CAPACITY);
+    stats.nextPageSample = data[27] % ReadingStatsData::SPEED_SAMPLE_CAPACITY;
+    std::copy_n(data.data() + 28, ReadingStatsData::SPEED_SAMPLE_CAPACITY, stats.pageSeconds.begin());
+  }
   return true;
 }
 
@@ -81,6 +98,9 @@ bool saveFile(const char* path, const ReadingStatsData& stats) {
   write32(data.data() + 17, stats.lastSessionSeconds);
   write32(data.data() + 21, stats.completedBooks);
   data[25] = stats.finished ? 1 : 0;
+  data[26] = std::min<uint8_t>(stats.pageSampleCount, ReadingStatsData::SPEED_SAMPLE_CAPACITY);
+  data[27] = stats.nextPageSample % ReadingStatsData::SPEED_SAMPLE_CAPACITY;
+  std::copy(stats.pageSeconds.begin(), stats.pageSeconds.end(), data.begin() + 28);
   write32(data.data() + WIRE_SIZE - 4, checksum(data.data(), WIRE_SIZE - 4));
 
   char temp[96];
@@ -146,24 +166,67 @@ bool ReadingStats::setBookFinished(const std::string& path, const bool finished)
 }
 
 bool ReadingStats::resetBook(const std::string& path) {
+  ReadingStatsData existing;
+  loadBook(path, existing);
+  ReadingStatsData cleared;
+  cleared.finished = existing.finished;
+
+  ReadingStats& live = instance();
+  if (live.path_ == path) {
+    live.book_ = cleared;
+    live.sessionSeconds_ = 0;
+    live.sessionPageTurns_ = 0;
+    live.lastInteractionMs_ = millis();
+    live.dirty_ = false;
+  }
   char filePath[72];
   bookStatsPath(path, filePath, sizeof(filePath));
+  if (cleared.finished) return saveFile(filePath, cleared);
   return !Storage.exists(filePath) || Storage.remove(filePath);
 }
 
 void ReadingStats::formatDuration(const uint32_t seconds, char* buffer, const size_t size) {
-  if (seconds < 60) {
-    snprintf(buffer, size, "%s", tr(STR_DURATION_UNDER_MINUTE));
-    return;
-  }
-  const uint32_t minutes = seconds / 60;
-  const uint32_t hours = minutes / 60;
-  if (hours > 0) {
-    snprintf(buffer, size, tr(STR_DURATION_HOURS_MINUTES), static_cast<unsigned long>(hours),
-             static_cast<unsigned long>(minutes % 60));
+  const uint32_t days = seconds / 86400;
+  const uint32_t hours = (seconds / 3600) % 24;
+  const uint32_t minutes = (seconds / 60) % 60;
+  const uint32_t remainingSeconds = seconds % 60;
+  if (days > 0) {
+    snprintf(buffer, size, hours > 0 ? tr(STR_DURATION_DAYS_HOURS) : tr(STR_DURATION_DAYS),
+             static_cast<unsigned long>(days), static_cast<unsigned long>(hours));
+  } else if (hours > 0) {
+    snprintf(buffer, size, minutes > 0 ? tr(STR_DURATION_HOURS_MINUTES) : tr(STR_DURATION_HOURS),
+             static_cast<unsigned long>(hours), static_cast<unsigned long>(minutes));
+  } else if (minutes > 0) {
+    snprintf(buffer, size, remainingSeconds > 0 ? tr(STR_DURATION_MINUTES_SECONDS) : tr(STR_DURATION_MINUTES),
+             static_cast<unsigned long>(minutes), static_cast<unsigned long>(remainingSeconds));
   } else {
-    snprintf(buffer, size, tr(STR_DURATION_MINUTES), static_cast<unsigned long>(minutes));
+    snprintf(buffer, size, tr(STR_DURATION_SECONDS), static_cast<unsigned long>(remainingSeconds));
   }
+}
+
+uint32_t ReadingStats::readingSpeedSeconds(const ReadingStatsData& stats) {
+  if (stats.pageSampleCount < ReadingStatsData::MIN_SPEED_SAMPLES) return 0;
+  uint32_t total = 0;
+  for (size_t i = 0; i < stats.pageSampleCount; i++) total += stats.pageSeconds[i];
+  return (total + stats.pageSampleCount / 2) / stats.pageSampleCount;
+}
+
+uint32_t ReadingStats::remainingSeconds(const ReadingStatsData& stats, const uint8_t progressPercent,
+                                        const uint32_t estimatedPageCount) {
+  const uint32_t speed = readingSpeedSeconds(stats);
+  if (speed == 0 || progressPercent >= 100) return 0;
+
+  uint32_t remainingPages = 0;
+  if (estimatedPageCount > 0) {
+    remainingPages =
+        static_cast<uint32_t>((static_cast<uint64_t>(estimatedPageCount) * (100 - progressPercent) + 99) / 100);
+  } else if (progressPercent > 0 && stats.forwardPages > 0) {
+    remainingPages = static_cast<uint32_t>(
+        (static_cast<uint64_t>(stats.forwardPages) * (100 - progressPercent) + progressPercent - 1) / progressPercent);
+  }
+  return remainingPages > 0 ? static_cast<uint32_t>(std::min<uint64_t>(static_cast<uint64_t>(speed) * remainingPages,
+                                                                       std::numeric_limits<uint32_t>::max()))
+                            : 0;
 }
 
 void ReadingStats::startSession(const std::string& path) {
@@ -171,29 +234,39 @@ void ReadingStats::startSession(const std::string& path) {
   path_ = path;
   loadBook(path_, book_);
   loadGlobal(global_);
-  book_.sessions = saturatedAdd(book_.sessions, 1);
-  global_.sessions = saturatedAdd(global_.sessions, 1);
   lastInteractionMs_ = millis();
   sessionSeconds_ = 0;
+  sessionPageTurns_ = 0;
   active_ = true;
-  dirty_ = true;
+  dirty_ = false;
 }
 
-void ReadingStats::collectInterval() {
-  if (!active_) return;
+uint32_t ReadingStats::collectInterval() {
+  if (!active_) return 0;
   const unsigned long now = millis();
   const unsigned long elapsed = now - lastInteractionMs_;
   lastInteractionMs_ = now;
-  if (elapsed > MAX_ACTIVE_INTERVAL_MS) return;
-  sessionSeconds_ = saturatedAdd(sessionSeconds_, elapsed / 1000UL);
+  if (elapsed > MAX_ACTIVE_INTERVAL_MS) return 0;
+  const uint32_t seconds = elapsed / 1000UL;
+  sessionSeconds_ = saturatedAdd(sessionSeconds_, seconds);
+  return seconds;
+}
+
+void ReadingStats::addPageSample(const uint32_t seconds) {
+  if (seconds < MIN_VALID_PAGE_SECONDS || seconds > MAX_VALID_PAGE_SECONDS) return;
+  book_.pageSeconds[book_.nextPageSample] = static_cast<uint8_t>(seconds);
+  book_.nextPageSample = (book_.nextPageSample + 1) % ReadingStatsData::SPEED_SAMPLE_CAPACITY;
+  if (book_.pageSampleCount < ReadingStatsData::SPEED_SAMPLE_CAPACITY) book_.pageSampleCount++;
 }
 
 void ReadingStats::recordPageTurn(const bool forward) {
   if (!active_) return;
-  collectInterval();
+  const uint32_t pageSeconds = collectInterval();
+  sessionPageTurns_++;
   if (forward) {
     book_.forwardPages = saturatedAdd(book_.forwardPages, 1);
     global_.forwardPages = saturatedAdd(global_.forwardPages, 1);
+    addPageSample(pageSeconds);
   }
   dirty_ = true;
 }
@@ -216,16 +289,23 @@ void ReadingStats::persist() {
 void ReadingStats::finishSession() {
   if (!active_) return;
   collectInterval();
+  active_ = false;
+  if (sessionSeconds_ < 60 && sessionPageTurns_ == 0) {
+    dirty_ = false;
+    return;
+  }
+  book_.sessions = saturatedAdd(book_.sessions, 1);
+  global_.sessions = saturatedAdd(global_.sessions, 1);
   book_.readingSeconds = saturatedAdd(book_.readingSeconds, sessionSeconds_);
   global_.readingSeconds = saturatedAdd(global_.readingSeconds, sessionSeconds_);
   book_.lastSessionSeconds = sessionSeconds_;
   global_.lastSessionSeconds = sessionSeconds_;
-  active_ = false;
   dirty_ = true;
   persist();
 }
 
 uint32_t ReadingStats::finishSessionForSleep() {
+  const bool shouldCount = active_ && (currentSessionSeconds() >= 60 || sessionPageTurns_ > 0);
   finishSession();
-  return sessionSeconds_;
+  return shouldCount ? sessionSeconds_ : 0;
 }

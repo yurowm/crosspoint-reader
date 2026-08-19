@@ -14,6 +14,7 @@ struct RecentBook {
   // Populated for the home card from the book cache. These values deliberately
   // stay out of recent.json: they can always be refreshed from the source book.
   std::string series;
+  uint32_t remainingReadingSeconds = 0;
   uint8_t progressPercent = 0;
   bool started = false;
 

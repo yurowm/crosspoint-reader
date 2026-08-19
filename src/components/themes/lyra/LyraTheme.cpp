@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "ReadingStats.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
@@ -457,6 +458,13 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   if (book.started) {
     const std::string progressText = std::to_string(book.progressPercent) + "%";
     const int progressY = rect.y + rect.height - 7 - renderer.getLineHeight(SMALL_FONT_ID);
+    if (book.remainingReadingSeconds > 0) {
+      char duration[24];
+      char remaining[48];
+      ReadingStats::formatDuration(book.remainingReadingSeconds, duration, sizeof(duration));
+      snprintf(remaining, sizeof(remaining), tr(STR_HOME_TIME_REMAINING), duration);
+      renderer.drawText(SMALL_FONT_ID, textX, progressY - renderer.getLineHeight(SMALL_FONT_ID) - 4, remaining);
+    }
     renderer.drawText(SMALL_FONT_ID, textX, progressY, progressText.c_str());
     const int labelWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText.c_str());
     const int barX = textX + labelWidth + 8;

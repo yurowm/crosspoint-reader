@@ -14,6 +14,7 @@
 #include <string>
 
 #include "I18n.h"
+#include "ReadingStats.h"
 #include "RecentBooksStore.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -28,6 +29,7 @@
 #include "components/icons/folder24.h"
 #include "components/icons/hotspot.h"
 #include "components/icons/image24.h"
+#include "components/icons/statistics.h"
 #include "components/icons/text24.h"
 #include "components/icons/ui_icons_generated.h"
 #include "components/icons/wifi.h"
@@ -62,6 +64,8 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
     switch (icon) {
       case ContinueReading:
         return icon_continue_reading_20.bits;
+      case Statistics:
+        return icon_statistics_20.bits;
       case Library:
         return icon_menu_library_20.bits;
       case Recent:
@@ -131,6 +135,8 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return Image24Icon;
       case Book:
         return Book24Icon;
+      case Statistics:
+        return icon_statistics_24.bits;
       case File:
         return File24Icon;
       case ContinueReading:
@@ -198,6 +204,8 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return FolderIcon;
       case Book:
         return BookIcon;
+      case Statistics:
+        return icon_statistics_32.bits;
       case Wifi:
         return WifiIcon;
       case Hotspot:
@@ -275,6 +283,7 @@ void drawUIIcon(const GfxRenderer& renderer, const UIIcon icon, const int x, con
 
   switch (icon) {
     case Recent:
+    case Statistics:
     case Deferred:
     case Settings:
     case Transfer:
@@ -1053,6 +1062,13 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   if (book.started) {
     const std::string progressText = std::to_string(book.progressPercent) + "%";
     const int progressY = rect.y + rect.height - 7 - renderer.getLineHeight(SMALL_FONT_ID);
+    if (book.remainingReadingSeconds > 0) {
+      char duration[24];
+      char remaining[48];
+      ReadingStats::formatDuration(book.remainingReadingSeconds, duration, sizeof(duration));
+      snprintf(remaining, sizeof(remaining), tr(STR_HOME_TIME_REMAINING), duration);
+      renderer.drawText(SMALL_FONT_ID, textX, progressY - renderer.getLineHeight(SMALL_FONT_ID) - 4, remaining);
+    }
     renderer.drawText(SMALL_FONT_ID, textX, progressY, progressText.c_str());
     const int labelWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText.c_str());
     const int barX = textX + labelWidth + 8;
