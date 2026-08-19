@@ -524,7 +524,6 @@ void SleepActivity::onEnter() {
   Activity::onEnter();
 
   const bool frameWasInverted = display.isInverted();
-  const uint32_t sessionSeconds = READING_STATS.finishSessionForSleep();
 
   // Sleep screens always use normal polarity. This activity draws directly
   // from onEnter (outside ActivityManager's per-render polarity resolution),

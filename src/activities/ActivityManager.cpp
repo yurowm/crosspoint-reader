@@ -10,6 +10,7 @@
 
 #include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
+#include "ReadingStats.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
@@ -254,7 +255,8 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
 }
 
 void ActivityManager::goToSleep(bool fromTimeout) {
-  replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput, fromTimeout));
+  const uint32_t sessionSeconds = READING_STATS.finishSessionForSleep();
+  replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput, fromTimeout, sessionSeconds));
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
 }
 
