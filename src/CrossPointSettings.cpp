@@ -221,11 +221,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
   sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
   if (storedFontFamily == LEGACY_OPENDYSLEXIC && sdFontFamilyName[0] == '\0') {
-    fontFamily = NOTOSERIF;
+    fontFamily = NUNITO;
     strncpy(sdFontFamilyName, "OpenDyslexic", sizeof(sdFontFamilyName) - 1);
     sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
     needsResave = true;
-  } else if (storedFontFamily >= BUILTIN_FONT_COUNT) {
+  } else if (storedFontFamily == LEGACY_NOTOSANS || storedFontFamily >= BUILTIN_FONT_COUNT) {
     needsResave = true;
   }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
@@ -322,22 +322,17 @@ int CrossPointSettings::getReaderFontId() const {
     // Fall through to built-in if SD font not found
   }
 
-  // A built-in family only exists at BUILTIN_READER_POINT_SIZES, so a size
-  // carried over from an SD family may not be one of them. ensureLoaded()
-  // normally persists the snap; snap again here (without allocating — this runs
-  // in the page render loop) so rendering is correct even before it has run.
   const uint8_t pt =
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
-  const bool sans = (fontFamily == NOTOSANS);
   switch (pt) {
     case 12:
-      return sans ? NOTOSANS_12_FONT_ID : NOTOSERIF_12_FONT_ID;
+      return UI_12_FONT_ID;
     case 16:
-      return sans ? NOTOSANS_16_FONT_ID : NOTOSERIF_16_FONT_ID;
+      return NUNITO_16_FONT_ID;
     case 18:
-      return sans ? NOTOSANS_18_FONT_ID : NOTOSERIF_18_FONT_ID;
+      return NUNITO_18_FONT_ID;
     case 14:
     default:
-      return sans ? NOTOSANS_14_FONT_ID : NOTOSERIF_14_FONT_ID;
+      return NUNITO_14_FONT_ID;
   }
 }

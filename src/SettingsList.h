@@ -22,7 +22,7 @@
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
 inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   // Built-in font labels (StrId)
-  std::vector<StrId> enumValues = {StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS};
+  std::vector<StrId> enumValues = {StrId::STR_NUNITO};
   // Runtime string labels for SD card fonts
   std::vector<std::string> enumStringValues;
 
@@ -43,8 +43,7 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   // with all options when SD fonts are present.
   std::vector<std::string> allStringValues;
   if (sdFontCount > 0) {
-    allStringValues.push_back(I18N.get(StrId::STR_NOTO_SERIF));
-    allStringValues.push_back(I18N.get(StrId::STR_NOTO_SANS));
+    allStringValues.push_back(I18N.get(StrId::STR_NUNITO));
     allStringValues.insert(allStringValues.end(), enumStringValues.begin(), enumStringValues.end());
   }
 
@@ -248,8 +247,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         // --- Reader ---
         // Built-in font-family entry. Replaced per-call with a registry-aware
         // version when SD fonts are installed.
-        SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
-                          {StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS}, "fontFamily", StrId::STR_CAT_READER)
+        SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily, {StrId::STR_NUNITO}, "fontFamily",
+                          StrId::STR_CAT_READER)
             .withTextSettings(),
         // Placeholder: the selectable sizes depend on the active font family, so
         // this entry is always replaced by buildFontSizeSetting() below. It only
@@ -321,11 +320,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #else
-        SettingInfo::Enum(
-            StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES,
-             StrId::STR_CONFIRM_ACTION},
-            "shortPwrBtn", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
+                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
+                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM_ACTION},
+                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),

@@ -11,8 +11,8 @@
 // therefore come from whichever family is active: the built-in set below, or the
 // .cpfont files a user installed for an SD family.
 
-// The built-in Noto Serif / Noto Sans families are compiled in at exactly these
-// point sizes (see the global font objects in main.cpp).
+// Nunito is the only built-in reader family. Additional sizes remain available
+// through installed SD font families.
 inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {12, 14, 16, 18};
 
 // Point sizes selectable for the active reader font, ascending: the SD family's
