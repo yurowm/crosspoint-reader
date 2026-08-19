@@ -29,6 +29,7 @@
 #include "components/icons/folder24.h"
 #include "components/icons/hotspot.h"
 #include "components/icons/image24.h"
+#include "components/icons/listX.h"
 #include "components/icons/statistics.h"
 #include "components/icons/text24.h"
 #include "components/icons/ui_icons_generated.h"
@@ -98,6 +99,8 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return icon_minus_20.bits;
       case Trash:
         return icon_trash_20.bits;
+      case ListX:
+        return icon_list_x_20.bits;
       case Refresh:
         return icon_refresh_20.bits;
       case Cancel:
@@ -171,6 +174,8 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return icon_minus_24.bits;
       case Trash:
         return icon_trash_24.bits;
+      case ListX:
+        return icon_list_x_24.bits;
       case Refresh:
         return icon_refresh_24.bits;
       case Cancel:
@@ -212,6 +217,8 @@ const uint8_t* getUIIconBitmap(const UIIcon icon, const int size) {
         return HotspotIcon;
       case Bookmark:
         return BookmarkIcon;
+      case ListX:
+        return icon_list_x_32.bits;
       case ContinueReading:
         return icon_continue_reading_32.bits;
       case Library:
@@ -300,6 +307,7 @@ void drawUIIcon(const GfxRenderer& renderer, const UIIcon icon, const int x, con
     case Plus:
     case Minus:
     case Trash:
+    case ListX:
     case Refresh:
     case Cancel:
     case Exit:

@@ -154,6 +154,7 @@ enum UIIcon {
   Plus,
   Minus,
   Trash,
+  ListX,
   Refresh,
   Cancel,
   Exit,

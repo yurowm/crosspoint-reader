@@ -104,6 +104,7 @@ void ReadingStatsActivity::render(RenderLock&&) {
     }
   }
 
-  GUI.drawButtonHints(renderer, tr(STR_BACK), bookPath.empty() ? "" : tr(STR_CLEAR), "", "");
+  GUI.drawIconButtonHints(renderer, {.icon = NavigateBack}, bookPath.empty() ? ButtonHint{} : ButtonHint{.icon = ListX},
+                          {}, {});
   renderer.displayBuffer();
 }
