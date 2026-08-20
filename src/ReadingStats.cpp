@@ -211,18 +211,22 @@ uint32_t ReadingStats::readingSpeedSeconds(const ReadingStatsData& stats) {
   return (total + stats.pageSampleCount / 2) / stats.pageSampleCount;
 }
 
-uint32_t ReadingStats::remainingSeconds(const ReadingStatsData& stats, const uint8_t progressPercent,
+uint32_t ReadingStats::remainingSeconds(const ReadingStatsData& stats, const uint16_t progressBasisPoints,
                                         const uint32_t estimatedPageCount) {
   const uint32_t speed = readingSpeedSeconds(stats);
-  if (speed == 0 || progressPercent >= 100) return 0;
+  if (speed == 0 || progressBasisPoints >= PROGRESS_COMPLETE) return 0;
 
   uint32_t remainingPages = 0;
   if (estimatedPageCount > 0) {
     remainingPages =
-        static_cast<uint32_t>((static_cast<uint64_t>(estimatedPageCount) * (100 - progressPercent) + 99) / 100);
-  } else if (progressPercent > 0 && stats.forwardPages > 0) {
-    remainingPages = static_cast<uint32_t>(
-        (static_cast<uint64_t>(stats.forwardPages) * (100 - progressPercent) + progressPercent - 1) / progressPercent);
+        static_cast<uint32_t>((static_cast<uint64_t>(estimatedPageCount) * (PROGRESS_COMPLETE - progressBasisPoints) +
+                               PROGRESS_COMPLETE - 1) /
+                              PROGRESS_COMPLETE);
+  } else if (progressBasisPoints > 0 && stats.forwardPages > 0) {
+    remainingPages =
+        static_cast<uint32_t>((static_cast<uint64_t>(stats.forwardPages) * (PROGRESS_COMPLETE - progressBasisPoints) +
+                               progressBasisPoints - 1) /
+                              progressBasisPoints);
   }
   return remainingPages > 0 ? static_cast<uint32_t>(std::min<uint64_t>(static_cast<uint64_t>(speed) * remainingPages,
                                                                        std::numeric_limits<uint32_t>::max()))

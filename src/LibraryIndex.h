@@ -18,6 +18,7 @@ struct LibraryBook {
   uint64_t fileSize = 0;
   uint16_t modifiedDate = 0;
   uint16_t modifiedTime = 0;
+  uint16_t progressBasisPoints = 0;
   uint8_t progressPercent = 0;
   bool started = false;
 

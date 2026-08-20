@@ -26,11 +26,12 @@ ReadingStatsActivity::ReadingStatsActivity(GfxRenderer& renderer, MappedInputMan
     : Activity("GlobalReadingStats", renderer, mappedInput) {}
 
 ReadingStatsActivity::ReadingStatsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path,
-                                           std::string bookTitle, const uint8_t progress, const uint32_t pageCount)
+                                           std::string bookTitle, const uint16_t progressBasisPoints,
+                                           const uint32_t pageCount)
     : Activity("BookReadingStats", renderer, mappedInput),
       bookPath(std::move(path)),
       title(std::move(bookTitle)),
-      progressPercent(progress),
+      progressBasisPoints(progressBasisPoints),
       estimatedPageCount(pageCount) {}
 
 void ReadingStatsActivity::onEnter() {
@@ -97,7 +98,7 @@ void ReadingStatsActivity::render(RenderLock&&) {
       drawRow(renderer, y, tr(STR_READING_SPEED), value);
     }
     y += metrics.listRowHeight;
-    const uint32_t remaining = ReadingStats::remainingSeconds(stats, progressPercent, estimatedPageCount);
+    const uint32_t remaining = ReadingStats::remainingSeconds(stats, progressBasisPoints, estimatedPageCount);
     if (remaining > 0) {
       ReadingStats::formatDuration(remaining, value, sizeof(value));
       drawRow(renderer, y, tr(STR_TIME_REMAINING), value);

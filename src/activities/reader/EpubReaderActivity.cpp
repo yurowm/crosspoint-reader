@@ -801,15 +801,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::STATISTICS: {
-      int progress = 0;
+      int progressBasisPoints = 0;
       if (epub && epub->getBookSize() > 0 && section && section->pageCount > 0) {
         const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
-        progress = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f);
+        progressBasisPoints = static_cast<int>(
+            epub->calculateProgress(currentSpineIndex, chapterProgress) * ReadingStats::PROGRESS_COMPLETE + 0.5f);
       }
-      startActivityForResult(
-          std::make_unique<ReadingStatsActivity>(renderer, mappedInput, epub->getPath(), epub->getTitle(),
-                                                 static_cast<uint8_t>(std::clamp(progress, 0, 100))),
-          [this](const ActivityResult&) { openReaderMenu(); });
+      startActivityForResult(std::make_unique<ReadingStatsActivity>(
+                                 renderer, mappedInput, epub->getPath(), epub->getTitle(),
+                                 static_cast<uint16_t>(std::clamp(progressBasisPoints, 0,
+                                                                  static_cast<int>(ReadingStats::PROGRESS_COMPLETE)))),
+                             [this](const ActivityResult&) { openReaderMenu(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {

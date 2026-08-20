@@ -88,6 +88,7 @@ void LibraryBookMenuActivity::activateSelection() {
     const bool markAsRead = !book.started || book.progressPercent < 100;
     book.started = markAsRead;
     book.progressPercent = markAsRead ? 100 : 0;
+    book.progressBasisPoints = markAsRead ? ReadingStats::PROGRESS_COMPLETE : 0;
     if (!LibraryIndex::setProgressState(book.path, book.progressPercent, book.started)) {
       LOG_ERR("LBM", "Failed to update progress state for %s", book.path.c_str());
     }
@@ -98,7 +99,7 @@ void LibraryBookMenuActivity::activateSelection() {
 
   if (selectorIndex == 3) {
     auto stats = makeUniqueNoThrow<ReadingStatsActivity>(renderer, mappedInput, book.path, book.title,
-                                                         book.progressPercent, estimatedPageCount);
+                                                         book.progressBasisPoints, estimatedPageCount);
     if (!stats) {
       LOG_ERR("LBM", "OOM: ReadingStatsActivity");
       return;

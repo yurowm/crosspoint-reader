@@ -62,7 +62,7 @@ uint32_t estimatedPageCount(const GfxRenderer& renderer, const std::string& path
   return lookup.pageCount;
 }
 
-bool readEpubProgress(const Epub& epub, uint8_t& progressPercent) {
+bool readEpubProgress(const Epub& epub, uint16_t& progressBasisPoints) {
   HalFile file;
   if (!Storage.openFileForRead("HOME", epub.getCachePath() + "/progress.bin", file)) {
     return false;
@@ -80,18 +80,19 @@ bool readEpubProgress(const Epub& epub, uint8_t& progressPercent) {
   const int currentPage = readLe16(data.data() + 2);
   const int pageCount = readLe16(data.data() + 4);
   if (savedSpineIndex >= spineCount) {
-    progressPercent = 100;
+    progressBasisPoints = ReadingStats::PROGRESS_COMPLETE;
     return true;
   }
 
   const int spineIndex = std::clamp(savedSpineIndex, 0, spineCount - 1);
   const float chapterProgress = pageCount > 0 ? static_cast<float>(currentPage) / pageCount : 0.0f;
-  const int percent = static_cast<int>(epub.calculateProgress(spineIndex, chapterProgress) * 100.0f + 0.5f);
-  progressPercent = static_cast<uint8_t>(std::clamp(percent, 0, 99));
+  const int basisPoints =
+      static_cast<int>(epub.calculateProgress(spineIndex, chapterProgress) * ReadingStats::PROGRESS_COMPLETE + 0.5f);
+  progressBasisPoints = static_cast<uint16_t>(std::clamp(basisPoints, 0, 9999));
   return true;
 }
 
-bool readXtcProgress(const Xtc& xtc, uint8_t& progressPercent) {
+bool readXtcProgress(const Xtc& xtc, uint16_t& progressBasisPoints) {
   HalFile file;
   if (!Storage.openFileForRead("HOME", xtc.getCachePath() + "/progress.bin", file)) {
     return false;
@@ -104,7 +105,10 @@ bool readXtcProgress(const Xtc& xtc, uint8_t& progressPercent) {
     return false;
   }
 
-  progressPercent = xtc.calculateProgress(std::min(readLe32(data.data()), xtc.getPageCount() - 1));
+  const uint32_t page = std::min(readLe32(data.data()), xtc.getPageCount() - 1);
+  progressBasisPoints = static_cast<uint16_t>(
+      std::min<uint64_t>(((static_cast<uint64_t>(page) + 1) * ReadingStats::PROGRESS_COMPLETE) / xtc.getPageCount(),
+                         ReadingStats::PROGRESS_COMPLETE));
   return true;
 }
 
@@ -231,7 +235,7 @@ void HomeActivity::loadCurrentBookDetails() {
       if (!book.series.empty()) book.series += " · ";
       book.series += displaySeriesIndex(epub.getSeriesIndex());
     }
-    book.started = readEpubProgress(epub, book.progressPercent);
+    book.started = readEpubProgress(epub, book.progressBasisPoints);
   } else if (FsHelpers::hasXtcExtension(book.path)) {
     Xtc xtc(book.path, "/.crosspoint");
     if (!xtc.load()) {
@@ -239,14 +243,17 @@ void HomeActivity::loadCurrentBookDetails() {
     }
     if (!xtc.getTitle().empty()) book.title = xtc.getTitle();
     if (!xtc.getAuthor().empty()) book.author = xtc.getAuthor();
-    book.started = readXtcProgress(xtc, book.progressPercent);
+    book.started = readXtcProgress(xtc, book.progressBasisPoints);
   }
 
   if (book.started) {
+    book.progressPercent = book.progressBasisPoints >= ReadingStats::PROGRESS_COMPLETE
+                               ? 100
+                               : static_cast<uint8_t>(std::min<uint16_t>((book.progressBasisPoints + 50) / 100, 99));
     ReadingStatsData stats;
     if (ReadingStats::loadBook(book.path, stats)) {
       book.remainingReadingSeconds =
-          ReadingStats::remainingSeconds(stats, book.progressPercent, estimatedPageCount(renderer, book.path));
+          ReadingStats::remainingSeconds(stats, book.progressBasisPoints, estimatedPageCount(renderer, book.path));
     }
   }
 }

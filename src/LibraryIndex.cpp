@@ -71,14 +71,15 @@ bool writeStringList(HalFile& file, const std::vector<std::string>& values) {
 
 bool readBook(HalFile& file, LibraryBook& book) {
   uint8_t started = 0;
-  const bool ok = readPod(file, book.fileSize) && readPod(file, book.modifiedDate) &&
-                  readPod(file, book.modifiedTime) && readString(file, book.path) && readString(file, book.title) &&
-                  readString(file, book.author) && readStringList(file, book.authors) &&
-                  readString(file, book.series) && readString(file, book.seriesIndex) && readString(file, book.year) &&
-                  readStringList(file, book.tags) && readString(file, book.coverBmpPath) &&
-                  readPod(file, book.visibleCharacterCount) && readPod(file, book.progressPercent) && readPod(file, started);
+  const bool ok =
+      readPod(file, book.fileSize) && readPod(file, book.modifiedDate) && readPod(file, book.modifiedTime) &&
+      readString(file, book.path) && readString(file, book.title) && readString(file, book.author) &&
+      readStringList(file, book.authors) && readString(file, book.series) && readString(file, book.seriesIndex) &&
+      readString(file, book.year) && readStringList(file, book.tags) && readString(file, book.coverBmpPath) &&
+      readPod(file, book.visibleCharacterCount) && readPod(file, book.progressPercent) && readPod(file, started);
   if (!ok) return false;
   book.started = started != 0;
+  book.progressBasisPoints = static_cast<uint16_t>(book.progressPercent) * 100;
   return !book.path.empty() && book.path.front() == '/';
 }
 
@@ -123,6 +124,7 @@ bool LibraryIndex::load(std::vector<LibraryBook>& books) {
       return false;
     }
     book.progressPercent = std::min<uint8_t>(book.progressPercent, 100);
+    book.progressBasisPoints = static_cast<uint16_t>(book.progressPercent) * 100;
     books.push_back(std::move(book));
   }
   file.close();
@@ -162,6 +164,7 @@ bool LibraryIndex::visitBooks(const BookVisitor visitor, void* context) {
       return false;
     }
     book->progressPercent = std::min<uint8_t>(book->progressPercent, 100);
+    book->progressBasisPoints = static_cast<uint16_t>(book->progressPercent) * 100;
     if (!visitor(*book, context)) break;
   }
   return true;
@@ -216,6 +219,7 @@ bool LibraryIndex::setProgressState(const std::string& path, const uint8_t progr
   if (it->started == started && it->progressPercent == clamped) return true;
   it->started = started;
   it->progressPercent = clamped;
+  it->progressBasisPoints = static_cast<uint16_t>(clamped) * 100;
   return save(books);
 }
 

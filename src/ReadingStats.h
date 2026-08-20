@@ -23,6 +23,8 @@ struct ReadingStatsData {
 
 class ReadingStats {
  public:
+  static constexpr uint16_t PROGRESS_COMPLETE = 10000;
+
   static ReadingStats& instance();
 
   static bool loadBook(const std::string& path, ReadingStatsData& stats);
@@ -31,7 +33,7 @@ class ReadingStats {
   static bool resetBook(const std::string& path);
   static void formatDuration(uint32_t seconds, char* buffer, size_t size);
   static uint32_t readingSpeedSeconds(const ReadingStatsData& stats);
-  static uint32_t remainingSeconds(const ReadingStatsData& stats, uint8_t progressPercent,
+  static uint32_t remainingSeconds(const ReadingStatsData& stats, uint16_t progressBasisPoints,
                                    uint32_t estimatedPageCount = 0);
 
   void startSession(const std::string& path);

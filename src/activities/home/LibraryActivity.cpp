@@ -16,10 +16,11 @@
 #include <memory>
 #include <unordered_map>
 
-#include "LibraryFiltersActivity.h"
 #include "LibraryBookMenuActivity.h"
 #include "LibraryBookStateStore.h"
+#include "LibraryFiltersActivity.h"
 #include "MappedInputManager.h"
+#include "ReadingStats.h"
 #include "components/BookListItem.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -116,7 +117,7 @@ std::string LibraryActivity::filenameStem(const std::string& path) {
   return path.substr(start, dot - start);
 }
 
-bool LibraryActivity::readEpubProgress(const Epub& epub, uint8_t& progressPercent) {
+bool LibraryActivity::readEpubProgress(const Epub& epub, uint16_t& progressBasisPoints) {
   HalFile file;
   if (!Storage.openFileForRead("LIB", epub.getCachePath() + "/progress.bin", file)) {
     return false;
@@ -138,18 +139,19 @@ bool LibraryActivity::readEpubProgress(const Epub& epub, uint8_t& progressPercen
   }
 
   if (spineIndex >= spineCount) {
-    progressPercent = 100;
+    progressBasisPoints = ReadingStats::PROGRESS_COMPLETE;
     return true;
   }
 
   const int clampedSpine = std::clamp(spineIndex, 0, spineCount - 1);
   const float chapterProgress = pageCount > 0 ? static_cast<float>(currentPage) / pageCount : 0.0f;
-  const int percent = static_cast<int>(epub.calculateProgress(clampedSpine, chapterProgress) * 100.0f + 0.5f);
-  progressPercent = static_cast<uint8_t>(std::clamp(percent, 0, 99));
+  const int basisPoints =
+      static_cast<int>(epub.calculateProgress(clampedSpine, chapterProgress) * ReadingStats::PROGRESS_COMPLETE + 0.5f);
+  progressBasisPoints = static_cast<uint16_t>(std::clamp(basisPoints, 0, 9999));
   return true;
 }
 
-bool LibraryActivity::readXtcProgress(const Xtc& xtc, uint8_t& progressPercent) {
+bool LibraryActivity::readXtcProgress(const Xtc& xtc, uint16_t& progressBasisPoints) {
   HalFile file;
   if (!Storage.openFileForRead("LIB", xtc.getCachePath() + "/progress.bin", file)) {
     return false;
@@ -163,7 +165,9 @@ bool LibraryActivity::readXtcProgress(const Xtc& xtc, uint8_t& progressPercent) 
   }
 
   const uint32_t page = std::min(readLe32(data.data()), xtc.getPageCount() - 1);
-  progressPercent = xtc.calculateProgress(page);
+  progressBasisPoints = static_cast<uint16_t>(
+      std::min<uint64_t>(((static_cast<uint64_t>(page) + 1) * ReadingStats::PROGRESS_COMPLETE) / xtc.getPageCount(),
+                         ReadingStats::PROGRESS_COMPLETE));
   return true;
 }
 
@@ -202,7 +206,7 @@ LibraryBook LibraryActivity::loadBook(const LibraryFileInfo& file) {
         }
       }
       if (loadedWithSpine && hasProgress) {
-        book.started = readEpubProgress(epub, book.progressPercent);
+        book.started = readEpubProgress(epub, book.progressBasisPoints);
       }
     }
   } else if (FsHelpers::hasXtcExtension(file.path)) {
@@ -214,10 +218,15 @@ LibraryBook LibraryActivity::loadBook(const LibraryFileInfo& file) {
       if (Storage.exists(thumb.c_str())) {
         book.coverBmpPath = thumb;
       }
-      book.started = readXtcProgress(xtc, book.progressPercent);
+      book.started = readXtcProgress(xtc, book.progressBasisPoints);
     }
   }
 
+  if (book.started) {
+    book.progressPercent = book.progressBasisPoints >= ReadingStats::PROGRESS_COMPLETE
+                               ? 100
+                               : static_cast<uint8_t>(std::min<uint16_t>((book.progressBasisPoints + 50) / 100, 99));
+  }
   book.deferred = LIBRARY_BOOK_STATE.isDeferred(book.path);
 
   return book;
@@ -489,16 +498,20 @@ void LibraryActivity::openFilters() {
 
 void LibraryActivity::openBookMenu(LibraryBook& book) {
   rememberSelectedBook();
-  const uint32_t estimatedPages =
-      BookPageEstimator::pageCount(book.visibleCharacterCount, estimatedCharactersPerPage);
+  if (FsHelpers::hasEpubExtension(book.path)) {
+    Epub epub(book.path, "/.crosspoint");
+    if (epub.load(false, true)) readEpubProgress(epub, book.progressBasisPoints);
+  } else if (FsHelpers::hasXtcExtension(book.path)) {
+    Xtc xtc(book.path, "/.crosspoint");
+    if (xtc.load()) readXtcProgress(xtc, book.progressBasisPoints);
+  }
+  const uint32_t estimatedPages = BookPageEstimator::pageCount(book.visibleCharacterCount, estimatedCharactersPerPage);
   auto menu = makeUniqueNoThrow<LibraryBookMenuActivity>(renderer, mappedInput, book, estimatedPages);
   if (!menu) {
     LOG_ERR("LIB", "OOM: LibraryBookMenuActivity");
     return;
   }
-  startActivityForResult(std::move(menu), [this](const ActivityResult&) {
-    requestUpdate();
-  });
+  startActivityForResult(std::move(menu), [this](const ActivityResult&) { requestUpdate(); });
 }
 
 void LibraryActivity::loop() {
@@ -535,9 +548,8 @@ void LibraryActivity::loop() {
   const int visibleRows = std::min(BookListItem::ITEMS_PER_PAGE, bookCount - pageStart);
 
   int row = -1;
-  const auto touch =
-      mappedInput.rowTouch(row, contentTop, rowHeight + BookListItem::ROW_GAP, visibleRows, 0,
-                           renderer.getScreenWidth(), rowHeight);
+  const auto touch = mappedInput.rowTouch(row, contentTop, rowHeight + BookListItem::ROW_GAP, visibleRows, 0,
+                                          renderer.getScreenWidth(), rowHeight);
   if (touch != MappedInputManager::RowTouch::None) {
     const size_t touchedIndex = static_cast<size_t>(pageStart + row);
     if (selectorIndex != touchedIndex) {
@@ -576,7 +588,7 @@ void LibraryActivity::loop() {
   }
 
   const auto handleRelease = [this, bookCount](const MappedInputManager::Button button, const bool next,
-                                                const bool byPage) {
+                                               const bool byPage) {
     if (!mappedInput.wasReleased(button)) return false;
     if (!navigationRepeated) moveSelection(bookCount, next, byPage);
     navigationRepeated = false;
@@ -609,7 +621,6 @@ void LibraryActivity::loop() {
       return;
     }
   }
-
 }
 
 void LibraryActivity::render(RenderLock&&) {
@@ -654,10 +665,9 @@ void LibraryActivity::render(RenderLock&&) {
     }
   } else {
     if (bookIndices.empty()) {
-      UITheme::drawCenteredText(renderer, Rect{0, contentTop, pageWidth, contentHeight}, UI_12_FONT_ID,
-                                contentTop + contentHeight / 2,
-                                viewState.filtersActive() ? tr(STR_NO_LIBRARY_FILTERED_BOOKS)
-                                                          : tr(STR_NO_LIBRARY_BOOKS));
+      UITheme::drawCenteredText(
+          renderer, Rect{0, contentTop, pageWidth, contentHeight}, UI_12_FONT_ID, contentTop + contentHeight / 2,
+          viewState.filtersActive() ? tr(STR_NO_LIBRARY_FILTERED_BOOKS) : tr(STR_NO_LIBRARY_BOOKS));
     } else {
       const int rowHeight = BookListItem::rowHeight(contentHeight);
       const int pageStart =
@@ -665,9 +675,8 @@ void LibraryActivity::render(RenderLock&&) {
       const int contentSidePadding = metrics.contentSidePadding;
       const int rowWidth = pageWidth - contentSidePadding * 2;
 
-      for (int index = pageStart; index < static_cast<int>(bookIndices.size()) &&
-                                  index < pageStart + BookListItem::ITEMS_PER_PAGE;
-           index++) {
+      for (int index = pageStart;
+           index < static_cast<int>(bookIndices.size()) && index < pageStart + BookListItem::ITEMS_PER_PAGE; index++) {
         const int rowY = contentTop + (index - pageStart) * (rowHeight + BookListItem::ROW_GAP);
         const bool selected = index == static_cast<int>(selectorIndex);
 

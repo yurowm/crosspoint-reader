@@ -39,6 +39,7 @@ constexpr char TRANSPARENT_SLEEP_DIR[] = "/.sleep-overlay";
 constexpr char TRANSPARENT_SLEEP_LEGACY_DIR[] = "/sleep-overlay";
 constexpr size_t MAX_SLEEP_FILE_NAME_LEN = 256;
 constexpr uint8_t MIN_VISIBLE_ALPHA = 8;
+constexpr uint32_t SLEEP_TRANSITION_DELAY_MS = 1200;
 
 struct BitmapPlacement {
   int x = 0;
@@ -539,7 +540,7 @@ void SleepActivity::onEnter() {
     if (APP_STATE.lastSleepFromReader) {
       ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
     }
-    if (drawSleepPopupPreservingFrame(renderer, sessionSeconds)) delay(1200);
+    if (drawSleepPopupPreservingFrame(renderer, sessionSeconds)) delay(SLEEP_TRANSITION_DELAY_MS);
     if (APP_STATE.lastSleepFromReader) {
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
     }
@@ -554,7 +555,7 @@ void SleepActivity::onEnter() {
     if (APP_STATE.lastSleepFromReader) {
       ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
     }
-    drawSleepPopupPreservingFrame(renderer, sessionSeconds);
+    if (drawSleepPopupPreservingFrame(renderer, sessionSeconds)) delay(SLEEP_TRANSITION_DELAY_MS);
     if (APP_STATE.lastSleepFromReader) {
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
     }
@@ -570,6 +571,7 @@ void SleepActivity::onEnter() {
   } else {
     drawSleepTransitionPopup(renderer, sessionSeconds);
   }
+  delay(SLEEP_TRANSITION_DELAY_MS);
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):

@@ -36,8 +36,8 @@ class LibraryActivity final : public Activity {
   void moveSelection(int bookCount, bool next, bool byPage);
 
   static std::string filenameStem(const std::string& path);
-  static bool readEpubProgress(const class Epub& epub, uint8_t& progressPercent);
-  static bool readXtcProgress(const class Xtc& xtc, uint8_t& progressPercent);
+  static bool readEpubProgress(const class Epub& epub, uint16_t& progressBasisPoints);
+  static bool readXtcProgress(const class Xtc& xtc, uint16_t& progressBasisPoints);
 
  public:
   explicit LibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
