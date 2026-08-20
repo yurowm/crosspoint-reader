@@ -51,6 +51,7 @@ class ReadingStats {
   ReadingStatsData global_;
   unsigned long lastInteractionMs_ = 0;
   uint32_t sessionSeconds_ = 0;
+  uint32_t pendingSleepSummarySeconds_ = 0;
   uint16_t sessionPageTurns_ = 0;
   bool active_ = false;
   bool dirty_ = false;

@@ -175,6 +175,7 @@ bool ReadingStats::resetBook(const std::string& path) {
   if (live.path_ == path) {
     live.book_ = cleared;
     live.sessionSeconds_ = 0;
+    live.pendingSleepSummarySeconds_ = 0;
     live.sessionPageTurns_ = 0;
     live.lastInteractionMs_ = millis();
     live.dirty_ = false;
@@ -235,6 +236,7 @@ uint32_t ReadingStats::remainingSeconds(const ReadingStatsData& stats, const uin
 
 void ReadingStats::startSession(const std::string& path) {
   if (active_) finishSession();
+  pendingSleepSummarySeconds_ = 0;
   path_ = path;
   loadBook(path_, book_);
   loadGlobal(global_);
@@ -295,6 +297,7 @@ void ReadingStats::finishSession() {
   collectInterval();
   active_ = false;
   if (sessionSeconds_ < 60 && sessionPageTurns_ == 0) {
+    pendingSleepSummarySeconds_ = 0;
     dirty_ = false;
     return;
   }
@@ -304,12 +307,14 @@ void ReadingStats::finishSession() {
   global_.readingSeconds = saturatedAdd(global_.readingSeconds, sessionSeconds_);
   book_.lastSessionSeconds = sessionSeconds_;
   global_.lastSessionSeconds = sessionSeconds_;
+  pendingSleepSummarySeconds_ = sessionSeconds_;
   dirty_ = true;
   persist();
 }
 
 uint32_t ReadingStats::finishSessionForSleep() {
-  const bool shouldCount = active_ && (currentSessionSeconds() >= 60 || sessionPageTurns_ > 0);
-  finishSession();
-  return shouldCount ? sessionSeconds_ : 0;
+  if (active_) finishSession();
+  const uint32_t summarySeconds = pendingSleepSummarySeconds_;
+  pendingSleepSummarySeconds_ = 0;
+  return summarySeconds;
 }
