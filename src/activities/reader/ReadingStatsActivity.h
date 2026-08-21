@@ -11,6 +11,9 @@ class ReadingStatsActivity final : public Activity {
   uint16_t progressBasisPoints = 0;
   uint32_t estimatedPageCount = 0;
   ReadingStatsData stats;
+  std::string currentBookTitle;
+  ReadingStatsData currentBookStats;
+  bool hasCurrentBook = false;
 
  public:
   ReadingStatsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);

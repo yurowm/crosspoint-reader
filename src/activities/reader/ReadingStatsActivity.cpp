@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -19,6 +21,24 @@ void drawRow(GfxRenderer& renderer, const int y, const char* label, const char* 
   const int valueWidth = renderer.getTextWidth(UI_10_FONT_ID, value, EpdFontFamily::BOLD);
   renderer.drawText(UI_10_FONT_ID, renderer.getScreenWidth() - metrics.contentSidePadding - valueWidth, y, value, true,
                     EpdFontFamily::BOLD);
+}
+
+void formatReadingSpeed(const ReadingStatsData& stats, char* value, const size_t size) {
+  const uint32_t secondsPerPage = ReadingStats::readingSpeedSeconds(stats);
+  if (secondsPerPage == 0) {
+    value[0] = '\0';
+    return;
+  }
+  const uint32_t pagesPerMinuteHundredths = (6000 + secondsPerPage / 2) / secondsPerPage;
+  snprintf(value, size, tr(STR_READING_SPEED_VALUE), static_cast<unsigned long>(pagesPerMinuteHundredths / 100),
+           static_cast<unsigned long>(pagesPerMinuteHundredths % 100));
+}
+
+std::string filenameStem(const std::string& path) {
+  const size_t slash = path.find_last_of('/');
+  const size_t start = slash == std::string::npos ? 0 : slash + 1;
+  const size_t dot = path.find_last_of('.');
+  return dot == std::string::npos || dot <= start ? path.substr(start) : path.substr(start, dot - start);
 }
 }  // namespace
 
@@ -38,6 +58,16 @@ void ReadingStatsActivity::onEnter() {
   Activity::onEnter();
   if (bookPath.empty()) {
     ReadingStats::loadGlobal(stats);
+    const std::string& currentPath = APP_STATE.openEpubPath;
+    if (!currentPath.empty()) {
+      currentBookTitle = filenameStem(currentPath);
+      const auto& recentBooks = RECENT_BOOKS.getBooks();
+      const auto recent = std::find_if(recentBooks.begin(), recentBooks.end(),
+                                       [&currentPath](const RecentBook& book) { return book.path == currentPath; });
+      if (recent != recentBooks.end() && !recent->title.empty()) currentBookTitle = recent->title;
+      ReadingStats::loadBook(currentPath, currentBookStats);
+      hasCurrentBook = true;
+    }
   } else {
     ReadingStats::loadBook(bookPath, stats);
   }
@@ -89,14 +119,38 @@ void ReadingStatsActivity::render(RenderLock&&) {
     const uint32_t averageSession = stats.sessions > 0 ? stats.readingSeconds / stats.sessions : 0;
     ReadingStats::formatDuration(averageSession, value, sizeof(value));
     drawRow(renderer, y, tr(STR_AVERAGE_SESSION), value);
-  } else {
-    const uint32_t speed = ReadingStats::readingSpeedSeconds(stats);
-    if (speed > 0) {
-      char duration[24];
-      ReadingStats::formatDuration(speed, duration, sizeof(duration));
-      snprintf(value, sizeof(value), tr(STR_READING_SPEED_VALUE), duration);
-      drawRow(renderer, y, tr(STR_READING_SPEED), value);
+    y += metrics.listRowHeight;
+
+    if (hasCurrentBook) {
+      renderer.drawLine(metrics.contentSidePadding, y, width - metrics.contentSidePadding, y);
+      y += metrics.verticalSpacing * 2;
+      const std::string visible =
+          renderer.truncatedText(UI_10_FONT_ID, currentBookTitle.c_str(), width - metrics.contentSidePadding * 2);
+      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, visible.c_str(), true, EpdFontFamily::BOLD);
+      y += renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing * 2;
+
+      ReadingStats::formatDuration(currentBookStats.readingSeconds, value, sizeof(value));
+      drawRow(renderer, y, tr(STR_READING_TIME), value);
+      y += metrics.listRowHeight;
+      formatReadingSpeed(currentBookStats, value, sizeof(value));
+      if (value[0] != '\0') {
+        drawRow(renderer, y, tr(STR_READING_SPEED), value);
+        y += metrics.listRowHeight;
+      }
+      const uint32_t bookAverageSession =
+          currentBookStats.sessions > 0 ? currentBookStats.readingSeconds / currentBookStats.sessions : 0;
+      ReadingStats::formatDuration(bookAverageSession, value, sizeof(value));
+      drawRow(renderer, y, tr(STR_AVERAGE_SESSION), value);
     }
+  } else {
+    formatReadingSpeed(stats, value, sizeof(value));
+    if (value[0] != '\0') {
+      drawRow(renderer, y, tr(STR_READING_SPEED), value);
+      y += metrics.listRowHeight;
+    }
+    const uint32_t averageSession = stats.sessions > 0 ? stats.readingSeconds / stats.sessions : 0;
+    ReadingStats::formatDuration(averageSession, value, sizeof(value));
+    drawRow(renderer, y, tr(STR_AVERAGE_SESSION), value);
     y += metrics.listRowHeight;
     const uint32_t remaining = ReadingStats::remainingSeconds(stats, progressBasisPoints, estimatedPageCount);
     if (remaining > 0) {
