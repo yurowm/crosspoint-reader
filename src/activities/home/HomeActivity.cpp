@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Memory.h>
@@ -481,7 +482,7 @@ void HomeActivity::render(RenderLock&&) {
   const auto actions = mappedInput.mapNavigationActions();
   GUI.drawIconButtonHints(renderer, homeButtonHint(actions.btn1), homeButtonHint(actions.btn2),
                           homeButtonHint(actions.btn3), homeButtonHint(actions.btn4));
-  renderer.displayBuffer();
+  renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
 
   if (!firstRenderDone) {
     firstRenderDone = true;
