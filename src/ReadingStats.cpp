@@ -176,7 +176,6 @@ bool ReadingStats::resetBook(const std::string& path) {
     live.book_ = cleared;
     live.sessionSeconds_ = 0;
     live.pendingSleepSummarySeconds_ = 0;
-    live.sessionRemainderMs_ = 0;
     live.sessionPageTurns_ = 0;
     live.lastInteractionMs_ = millis();
     live.dirty_ = false;
@@ -237,40 +236,25 @@ uint32_t ReadingStats::remainingSeconds(const ReadingStatsData& stats, const uin
 
 void ReadingStats::startSession(const std::string& path) {
   if (active_) finishSession();
-  pendingSleepSummarySeconds_ = 0;
   path_ = path;
   loadBook(path_, book_);
   loadGlobal(global_);
   lastInteractionMs_ = millis();
   sessionSeconds_ = 0;
-  sessionRemainderMs_ = 0;
   sessionPageTurns_ = 0;
   active_ = true;
-  paused_ = false;
   dirty_ = false;
 }
 
 uint32_t ReadingStats::collectInterval() {
-  if (!active_ || paused_) return 0;
+  if (!active_) return 0;
   const unsigned long now = millis();
   const unsigned long elapsed = now - lastInteractionMs_;
   lastInteractionMs_ = now;
-  const uint64_t totalMs = static_cast<uint64_t>(elapsed) + sessionRemainderMs_;
-  sessionSeconds_ = saturatedAdd(sessionSeconds_, static_cast<uint32_t>(totalMs / 1000UL));
-  sessionRemainderMs_ = totalMs % 1000UL;
-  return elapsed / 1000UL;
-}
-
-void ReadingStats::pauseTiming() {
-  if (!active_ || paused_) return;
-  collectInterval();
-  paused_ = true;
-}
-
-void ReadingStats::resumeTiming() {
-  if (!active_ || !paused_) return;
-  lastInteractionMs_ = millis();
-  paused_ = false;
+  if (elapsed > MAX_ACTIVE_INTERVAL_MS) return 0;
+  const uint32_t seconds = elapsed / 1000UL;
+  sessionSeconds_ = saturatedAdd(sessionSeconds_, seconds);
+  return seconds;
 }
 
 void ReadingStats::addPageSample(const uint32_t seconds) {
@@ -281,7 +265,7 @@ void ReadingStats::addPageSample(const uint32_t seconds) {
 }
 
 void ReadingStats::recordPageTurn(const bool forward) {
-  if (!active_ || paused_) return;
+  if (!active_) return;
   const uint32_t pageSeconds = collectInterval();
   sessionPageTurns_++;
   if (forward) {
@@ -293,10 +277,9 @@ void ReadingStats::recordPageTurn(const bool forward) {
 }
 
 uint32_t ReadingStats::currentSessionSeconds() const {
-  if (!active_ || paused_) return sessionSeconds_;
+  if (!active_) return sessionSeconds_;
   const unsigned long elapsed = millis() - lastInteractionMs_;
-  return saturatedAdd(sessionSeconds_,
-                      static_cast<uint32_t>((static_cast<uint64_t>(elapsed) + sessionRemainderMs_) / 1000UL));
+  return elapsed <= MAX_ACTIVE_INTERVAL_MS ? saturatedAdd(sessionSeconds_, elapsed / 1000UL) : sessionSeconds_;
 }
 
 void ReadingStats::persist() {
@@ -312,9 +295,7 @@ void ReadingStats::finishSession() {
   if (!active_) return;
   collectInterval();
   active_ = false;
-  paused_ = false;
   if (sessionSeconds_ < 60 && sessionPageTurns_ == 0) {
-    pendingSleepSummarySeconds_ = 0;
     dirty_ = false;
     return;
   }
@@ -324,7 +305,7 @@ void ReadingStats::finishSession() {
   global_.readingSeconds = saturatedAdd(global_.readingSeconds, sessionSeconds_);
   book_.lastSessionSeconds = sessionSeconds_;
   global_.lastSessionSeconds = sessionSeconds_;
-  pendingSleepSummarySeconds_ = sessionSeconds_;
+  pendingSleepSummarySeconds_ = saturatedAdd(pendingSleepSummarySeconds_, sessionSeconds_);
   dirty_ = true;
   persist();
 }
