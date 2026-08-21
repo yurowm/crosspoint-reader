@@ -176,6 +176,7 @@ bool ReadingStats::resetBook(const std::string& path) {
     live.book_ = cleared;
     live.sessionSeconds_ = 0;
     live.pendingSleepSummarySeconds_ = 0;
+    live.sessionRemainderMs_ = 0;
     live.sessionPageTurns_ = 0;
     live.lastInteractionMs_ = millis();
     live.dirty_ = false;
@@ -242,20 +243,34 @@ void ReadingStats::startSession(const std::string& path) {
   loadGlobal(global_);
   lastInteractionMs_ = millis();
   sessionSeconds_ = 0;
+  sessionRemainderMs_ = 0;
   sessionPageTurns_ = 0;
   active_ = true;
+  paused_ = false;
   dirty_ = false;
 }
 
 uint32_t ReadingStats::collectInterval() {
-  if (!active_) return 0;
+  if (!active_ || paused_) return 0;
   const unsigned long now = millis();
   const unsigned long elapsed = now - lastInteractionMs_;
   lastInteractionMs_ = now;
-  if (elapsed > MAX_ACTIVE_INTERVAL_MS) return 0;
-  const uint32_t seconds = elapsed / 1000UL;
-  sessionSeconds_ = saturatedAdd(sessionSeconds_, seconds);
-  return seconds;
+  const uint64_t totalMs = static_cast<uint64_t>(elapsed) + sessionRemainderMs_;
+  sessionSeconds_ = saturatedAdd(sessionSeconds_, static_cast<uint32_t>(totalMs / 1000UL));
+  sessionRemainderMs_ = totalMs % 1000UL;
+  return elapsed / 1000UL;
+}
+
+void ReadingStats::pauseTiming() {
+  if (!active_ || paused_) return;
+  collectInterval();
+  paused_ = true;
+}
+
+void ReadingStats::resumeTiming() {
+  if (!active_ || !paused_) return;
+  lastInteractionMs_ = millis();
+  paused_ = false;
 }
 
 void ReadingStats::addPageSample(const uint32_t seconds) {
@@ -266,7 +281,7 @@ void ReadingStats::addPageSample(const uint32_t seconds) {
 }
 
 void ReadingStats::recordPageTurn(const bool forward) {
-  if (!active_) return;
+  if (!active_ || paused_) return;
   const uint32_t pageSeconds = collectInterval();
   sessionPageTurns_++;
   if (forward) {
@@ -278,9 +293,10 @@ void ReadingStats::recordPageTurn(const bool forward) {
 }
 
 uint32_t ReadingStats::currentSessionSeconds() const {
-  if (!active_) return sessionSeconds_;
+  if (!active_ || paused_) return sessionSeconds_;
   const unsigned long elapsed = millis() - lastInteractionMs_;
-  return elapsed <= MAX_ACTIVE_INTERVAL_MS ? saturatedAdd(sessionSeconds_, elapsed / 1000UL) : sessionSeconds_;
+  return saturatedAdd(sessionSeconds_,
+                      static_cast<uint32_t>((static_cast<uint64_t>(elapsed) + sessionRemainderMs_) / 1000UL));
 }
 
 void ReadingStats::persist() {
@@ -296,6 +312,7 @@ void ReadingStats::finishSession() {
   if (!active_) return;
   collectInterval();
   active_ = false;
+  paused_ = false;
   if (sessionSeconds_ < 60 && sessionPageTurns_ == 0) {
     pendingSleepSummarySeconds_ = 0;
     dirty_ = false;
