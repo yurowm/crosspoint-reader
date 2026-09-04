@@ -1796,11 +1796,9 @@ void EpubReaderActivity::renderStatusBar() const {
 namespace {
 constexpr StrId kTextRowNames[] = {StrId::STR_FONT, StrId::STR_FONT_SIZE, StrId::STR_LINE_SPACING,
                                    StrId::STR_PARA_ALIGNMENT, StrId::STR_FOCUS_READING};
-constexpr StrId kSpacingIds[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};
 constexpr StrId kAlignIds[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                StrId::STR_BOOK_S_STYLE};
 constexpr int kTextRowCount = static_cast<int>(std::size(kTextRowNames));
-static_assert(std::size(kSpacingIds) == CrossPointSettings::LINE_COMPRESSION_COUNT, "line spacing labels");
 static_assert(std::size(kAlignIds) == CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT, "alignment labels");
 }  // namespace
 
@@ -1832,7 +1830,9 @@ std::string EpubReaderActivity::textRowValue(int row) const {
     case 1:
       return std::to_string(SETTINGS.fontPointSize) + " pt";
     case 2:
-      return I18N.get(kSpacingIds[SETTINGS.lineSpacing % CrossPointSettings::LINE_COMPRESSION_COUNT]);
+      return std::to_string(std::clamp<int>(SETTINGS.lineSpacing, CrossPointSettings::LINE_SPACING_MIN,
+                                            CrossPointSettings::LINE_SPACING_MAX)) +
+             "%";
     case 3:
       return I18N.get(kAlignIds[SETTINGS.paragraphAlignment % CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT]);
     case 4:
@@ -1873,13 +1873,26 @@ void EpubReaderActivity::showTextRowPopup(const int row) {
       });
       break;
     }
-    case 2:
-      overlayPopup.show(StrId::STR_LINE_SPACING, kSpacingIds, static_cast<int>(std::size(kSpacingIds)),
-                        SETTINGS.lineSpacing % CrossPointSettings::LINE_COMPRESSION_COUNT, [this](int idx) {
-                          SETTINGS.lineSpacing = static_cast<uint8_t>(idx);
-                          applyTextSettingLive();
-                        });
+    case 2: {
+      std::vector<std::string> labels;
+      labels.reserve((CrossPointSettings::LINE_SPACING_MAX - CrossPointSettings::LINE_SPACING_MIN) /
+                         CrossPointSettings::LINE_SPACING_STEP +
+                     1);
+      for (int percent = CrossPointSettings::LINE_SPACING_MIN; percent <= CrossPointSettings::LINE_SPACING_MAX;
+           percent += CrossPointSettings::LINE_SPACING_STEP) {
+        labels.push_back(std::to_string(percent) + "%");
+      }
+      const int current = (std::clamp<int>(SETTINGS.lineSpacing, CrossPointSettings::LINE_SPACING_MIN,
+                                           CrossPointSettings::LINE_SPACING_MAX) -
+                           CrossPointSettings::LINE_SPACING_MIN) /
+                          CrossPointSettings::LINE_SPACING_STEP;
+      overlayPopup.show(StrId::STR_LINE_SPACING, labels, current, [this](int idx) {
+        SETTINGS.lineSpacing =
+            static_cast<uint8_t>(CrossPointSettings::LINE_SPACING_MIN + idx * CrossPointSettings::LINE_SPACING_STEP);
+        applyTextSettingLive();
+      });
       break;
+    }
     case 3:
       overlayPopup.show(StrId::STR_PARA_ALIGNMENT, kAlignIds, static_cast<int>(std::size(kAlignIds)),
                         SETTINGS.paragraphAlignment % CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT, [this](int idx) {

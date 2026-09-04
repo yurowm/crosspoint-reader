@@ -1,4 +1,5 @@
 import hashlib
+import re
 import sys
 from pathlib import Path
 
@@ -19,17 +20,20 @@ platform = env.PioPlatform()
 builder = Path(platform.get_dir()) / "builder" / "frameworks" / "arduino.py"
 source = builder.read_text(encoding="utf-8")
 # The package already stores libraries per chip; only its cache-presence check is global.
-old_check = '''flag_any_custom_sdkconfig = (FRAMEWORK_LIB_DIR is not None and
-                            exists(str(Path(FRAMEWORK_LIB_DIR) / "sdkconfig")))'''
 new_check = '''flag_any_custom_sdkconfig = (
     FRAMEWORK_LIB_DIR is not None
     and exists(str(Path(FRAMEWORK_LIB_DIR) / chip_variant / "sdkconfig.orig"))
 )'''
 
-if old_check in source:
-    builder.write_text(source.replace(old_check, new_check, 1), encoding="utf-8")
-elif new_check not in source:
-    raise RuntimeError("Unsupported pioarduino cache check")
+if new_check not in source:
+    old_check = re.compile(
+        r'''flag_any_custom_sdkconfig\s*=\s*\(FRAMEWORK_LIB_DIR\s+is\s+not\s+None\s+and\s+'''
+        r'''exists\(str\(Path\(FRAMEWORK_LIB_DIR\)\s*/\s*["']sdkconfig["']\)\)\)'''
+    )
+    source, replacements = old_check.subn(new_check, source, count=1)
+    if replacements != 1:
+        raise RuntimeError("Unsupported pioarduino cache check")
+    builder.write_text(source, encoding="utf-8")
 
 requested = env.GetProjectOption("custom_sdkconfig", "")
 board = env.BoardConfig()
