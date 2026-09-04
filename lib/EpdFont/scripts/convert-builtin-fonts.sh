@@ -28,7 +28,7 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
   done
 done
 
-UI_FONT_SIZES=(10 12)
+NUNITO_FONT_SIZES=(10 12 14 16 18)
 UI_FONT_STYLES=("Regular" "Bold")
 
 # Arabic glyphs for UI text (menus, file browser titles). The built-in fonts
@@ -61,7 +61,7 @@ ARABIC_INTERVALS=(
   --additional-intervals 0xFE80,0xFEFC  # Presentation Forms-B: core Arabic + Lam-Alef
 )
 
-for size in ${UI_FONT_SIZES[@]}; do
+for size in ${NUNITO_FONT_SIZES[@]}; do
   for style in ${UI_FONT_STYLES[@]}; do
     font_name="nunito_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Nunito/Nunito-${style}.ttf"
