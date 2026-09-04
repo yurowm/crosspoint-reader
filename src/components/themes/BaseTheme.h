@@ -18,11 +18,6 @@ struct Rect {
   explicit Rect(int x = 0, int y = 0, int width = 0, int height = 0) : x(x), y(y), width(width), height(height) {}
 };
 
-struct TabInfo {
-  const char* label;
-  bool selected;
-};
-
 struct ThemeMetrics {
   int batteryWidth;
   int batteryHeight;
@@ -109,21 +104,21 @@ struct ThemeMetrics {
 
   int optionPopupItemSpacing;
   int optionPopupInnerPadding;
-  int optionPopupSelectionHPadding;
   int optionPopupSelectionVPadding;
-  int optionPopupTitleGap;
-  bool optionPopupUseSmallFont;
-  bool optionPopupOptionFontBold;
-  int optionPopupSelectionRadius;
-  bool optionPopupSelectionLight;
-  bool optionPopupDrawAllRows;
   int optionPopupDialogSideMargin;
-  bool optionPopupTitleSeparator;
 
   int textFieldHorizontalPadding;
   int textFieldNormalThickness;
   int textFieldCursorThickness;
   int textFieldLineEndOffset;
+
+  // FreeInkUI control shape (the control center panel), same contract as the
+  // list fields above: quick-setting tiles and slider step buttons, the
+  // sheet's free-edge corners, and the capsule slider's corners (255 = full
+  // stadium, i.e. radius = half the control height).
+  int controlRadius;
+  int sheetRadius;
+  int capsuleRadius;
 };
 
 enum UIIcon {
@@ -165,7 +160,8 @@ enum UIIcon {
   DeferredOff,
   MarkRead,
   MarkUnread,
-  BookCover
+  BookCover,
+  Usb
 };
 
 struct ButtonHint {
@@ -247,20 +243,15 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .popupProgressOutlineInverted = true,
                                  .optionPopupItemSpacing = 6,
                                  .optionPopupInnerPadding = 16,
-                                 .optionPopupSelectionHPadding = 8,
                                  .optionPopupSelectionVPadding = 4,
-                                 .optionPopupTitleGap = 10,
-                                 .optionPopupUseSmallFont = true,
-                                 .optionPopupOptionFontBold = true,
-                                 .optionPopupSelectionRadius = 0,
-                                 .optionPopupSelectionLight = false,
-                                 .optionPopupDrawAllRows = false,
                                  .optionPopupDialogSideMargin = 20,
-                                 .optionPopupTitleSeparator = true,
                                  .textFieldHorizontalPadding = 6,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
-                                 .textFieldLineEndOffset = 0};
+                                 .textFieldLineEndOffset = 0,
+                                 .controlRadius = 0,
+                                 .sheetRadius = 0,
+                                 .capsuleRadius = 0};
 }
 
 class BaseTheme {
@@ -300,10 +291,6 @@ class BaseTheme {
                           const char* subtitle = nullptr) const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                              const char* rightLabel = nullptr) const;
-  virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
-                          bool selected) const;
-  virtual bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
-                                 int& index) const;
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
@@ -311,8 +298,6 @@ class BaseTheme {
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
-  virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                               int selectedIndex) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
                      std::string title, const int paddingBottom = 0, const int textYOffset = 0,
