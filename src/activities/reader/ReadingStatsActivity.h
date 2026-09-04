@@ -9,7 +9,6 @@ class ReadingStatsActivity final : public Activity {
   std::string bookPath;
   std::string title;
   uint16_t progressBasisPoints = 0;
-  uint32_t estimatedPageCount = 0;
   ReadingStatsData stats;
   std::string currentBookTitle;
   ReadingStatsData currentBookStats;
@@ -18,7 +17,7 @@ class ReadingStatsActivity final : public Activity {
  public:
   ReadingStatsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
   ReadingStatsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath, std::string title,
-                       uint16_t progressBasisPoints, uint32_t estimatedPageCount = 0);
+                       uint16_t progressBasisPoints);
 
   void onEnter() override;
   void loop() override;

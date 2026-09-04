@@ -33,8 +33,7 @@ class ReadingStats {
   static bool resetBook(const std::string& path);
   static void formatDuration(uint32_t seconds, char* buffer, size_t size);
   static uint32_t readingSpeedSeconds(const ReadingStatsData& stats);
-  static uint32_t remainingSeconds(const ReadingStatsData& stats, uint16_t progressBasisPoints,
-                                   uint32_t estimatedPageCount = 0);
+  static uint32_t remainingSeconds(const ReadingStatsData& stats, uint16_t progressBasisPoints);
 
   void startSession(const std::string& path);
   void recordPageTurn(bool forward);

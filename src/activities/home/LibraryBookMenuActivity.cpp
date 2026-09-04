@@ -98,8 +98,8 @@ void LibraryBookMenuActivity::activateSelection() {
   }
 
   if (selectorIndex == 3) {
-    auto stats = makeUniqueNoThrow<ReadingStatsActivity>(renderer, mappedInput, book.path, book.title,
-                                                         book.progressBasisPoints, estimatedPageCount);
+    auto stats =
+        makeUniqueNoThrow<ReadingStatsActivity>(renderer, mappedInput, book.path, book.title, book.progressBasisPoints);
     if (!stats) {
       LOG_ERR("LBM", "OOM: ReadingStatsActivity");
       return;

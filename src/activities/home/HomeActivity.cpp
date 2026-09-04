@@ -25,7 +25,6 @@
 #include "activities/reader/ReadingStatsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/BookPageEstimator.h"
 
 namespace {
 uint16_t readLe16(const uint8_t* data) { return static_cast<uint16_t>(data[0] | (data[1] << 8)); }
@@ -42,25 +41,6 @@ std::string displaySeriesIndex(std::string index) {
     index.erase(decimalPoint);
   }
   return index;
-}
-
-struct PageCountLookup {
-  const std::string& path;
-  uint32_t charactersPerPage;
-  uint32_t pageCount = 0;
-};
-
-bool findPageCount(const LibraryBook& book, void* context) {
-  auto& lookup = *static_cast<PageCountLookup*>(context);
-  if (book.path != lookup.path) return true;
-  lookup.pageCount = BookPageEstimator::pageCount(book.visibleCharacterCount, lookup.charactersPerPage);
-  return false;
-}
-
-uint32_t estimatedPageCount(const GfxRenderer& renderer, const std::string& path) {
-  PageCountLookup lookup{path, BookPageEstimator::charactersPerPage(renderer)};
-  LibraryIndex::visitBooks(findPageCount, &lookup);
-  return lookup.pageCount;
 }
 
 bool readEpubProgress(const Epub& epub, uint16_t& progressBasisPoints) {
@@ -253,8 +233,7 @@ void HomeActivity::loadCurrentBookDetails() {
                                : static_cast<uint8_t>(std::min<uint16_t>((book.progressBasisPoints + 50) / 100, 99));
     ReadingStatsData stats;
     if (ReadingStats::loadBook(book.path, stats)) {
-      book.remainingReadingSeconds =
-          ReadingStats::remainingSeconds(stats, book.progressBasisPoints, estimatedPageCount(renderer, book.path));
+      book.remainingReadingSeconds = ReadingStats::remainingSeconds(stats, book.progressBasisPoints);
     }
   }
 }
