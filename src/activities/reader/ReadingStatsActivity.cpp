@@ -78,6 +78,20 @@ void ReadingStatsActivity::loop() {
     return;
   }
   if (!bookPath.empty() && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) confirmReset();
+
+  if (mappedInput.hasTouch()) {
+    int x = 0;
+    int y = 0;
+    if (!mappedInput.wasScreenTapped(x, y)) return;
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int buttonY = renderer.getScreenHeight() - metrics.listRowHeight - metrics.verticalSpacing;
+    if (y < buttonY) return;
+    if (x < renderer.getScreenWidth() / 2) {
+      finish();
+    } else if (!bookPath.empty()) {
+      confirmReset();
+    }
+  }
 }
 
 void ReadingStatsActivity::confirmReset() {
@@ -157,7 +171,24 @@ void ReadingStatsActivity::render(RenderLock&&) {
     }
   }
 
-  GUI.drawIconButtonHints(renderer, {.icon = NavigateBack}, bookPath.empty() ? ButtonHint{} : ButtonHint{.icon = ListX},
-                          {}, {});
+  if (mappedInput.hasTouch()) {
+    const int gap = metrics.verticalSpacing;
+    const int buttonY = renderer.getScreenHeight() - metrics.listRowHeight - gap;
+    const int buttonWidth = (width - metrics.contentSidePadding * 2 - gap) / 2;
+    const auto drawTouchButton = [&](const int x, const int buttonWidth, const char* label) {
+      renderer.drawRect(x, buttonY, buttonWidth, metrics.listRowHeight, true);
+      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label, EpdFontFamily::BOLD);
+      const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+      renderer.drawText(UI_10_FONT_ID, x + (buttonWidth - textWidth) / 2,
+                        buttonY + (metrics.listRowHeight - lineHeight) / 2, label, true, EpdFontFamily::BOLD);
+    };
+    drawTouchButton(metrics.contentSidePadding, buttonWidth, tr(STR_BACK));
+    if (!bookPath.empty()) {
+      drawTouchButton(metrics.contentSidePadding + buttonWidth + gap, buttonWidth, tr(STR_CLEAR_BOOK_STATS));
+    }
+  } else {
+    GUI.drawIconButtonHints(renderer, {.icon = NavigateBack},
+                            bookPath.empty() ? ButtonHint{} : ButtonHint{.icon = ListX}, {}, {});
+  }
   renderer.displayBuffer();
 }
