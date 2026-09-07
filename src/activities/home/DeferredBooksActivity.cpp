@@ -132,6 +132,38 @@ void DeferredBooksActivity::loop() {
   }
   if (books.empty()) return;
 
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int rowHeight = BookListItem::rowHeight(contentHeight);
+  const int pageStart =
+      static_cast<int>(selectorIndex / BookListItem::ITEMS_PER_PAGE) * BookListItem::ITEMS_PER_PAGE;
+  const int visibleRows =
+      std::min(BookListItem::ITEMS_PER_PAGE, static_cast<int>(books.size()) - pageStart);
+  int row = -1;
+  const auto touch = mappedInput.rowTouch(row, contentTop, rowHeight + BookListItem::ROW_GAP, visibleRows, 0,
+                                          renderer.getScreenWidth(), rowHeight);
+  if (touch != MappedInputManager::RowTouch::None) {
+    selectorIndex = static_cast<size_t>(pageStart + row);
+    if (touch == MappedInputManager::RowTouch::Tap) {
+      openBookMenu();
+    } else {
+      requestUpdate();
+    }
+    return;
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    moveSelection(true, true);
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    moveSelection(false, true);
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (mappedInput.getHeldTime() < CONFIRM_HOLD_MS) {
       openBookMenu();

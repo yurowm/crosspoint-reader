@@ -86,7 +86,7 @@ void ReadingStatsActivity::loop() {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const int buttonY = renderer.getScreenHeight() - metrics.listRowHeight - metrics.verticalSpacing;
     if (y < buttonY) return;
-    if (x < renderer.getScreenWidth() / 2) {
+    if (bookPath.empty() || x < renderer.getScreenWidth() / 2) {
       finish();
     } else if (!bookPath.empty()) {
       confirmReset();

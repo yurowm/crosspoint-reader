@@ -533,6 +533,14 @@ void LibraryActivity::loop() {
     return;
   }
 
+  if (mappedInput.hasTouch()) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    if (mappedInput.wasTapInRect(0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight)) {
+      openFilters();
+      return;
+    }
+  }
+
   const auto bookIndices = filteredBookIndices();
   const int bookCount = static_cast<int>(bookIndices.size());
   if (bookCount == 0) {

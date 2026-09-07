@@ -133,6 +133,37 @@ void LibraryBookMenuActivity::loop() {
     return;
   }
 
+  if (mappedInput.hasTouch()) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int pageWidth = renderer.getScreenWidth();
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    constexpr int detailGap = 4;
+    const int detailLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const std::string* details[] = {&book.author, &seriesText, &book.year, &tagsText, &pageCountText};
+    int actionsTop = contentTop;
+    int visibleDetails = 0;
+    for (const std::string* detail : details) {
+      if (detail->empty()) continue;
+      actionsTop += detailLineHeight + detailGap;
+      visibleDetails++;
+    }
+    if (visibleDetails > 0) actionsTop += metrics.verticalSpacing;
+
+    int row = -1;
+    const int rowHeight = GUI.getMenuRowHeight(renderer);
+    const auto touch = mappedInput.rowTouch(row, actionsTop, rowHeight + metrics.menuSpacing, ACTION_COUNT, 0,
+                                            pageWidth, rowHeight + metrics.verticalSpacing);
+    if (touch != MappedInputManager::RowTouch::None) {
+      selectorIndex = static_cast<size_t>(row);
+      if (touch == MappedInputManager::RowTouch::Tap) {
+        activateSelection();
+      } else {
+        requestUpdate();
+      }
+      return;
+    }
+  }
+
   buttonNavigator.onNextRelease([this] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), ACTION_COUNT);
     requestUpdate();

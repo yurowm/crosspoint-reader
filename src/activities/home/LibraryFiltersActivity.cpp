@@ -151,6 +151,49 @@ void LibraryFiltersActivity::openValues(const FilterField field) {
   requestUpdate();
 }
 
+void LibraryFiltersActivity::activateSelection() {
+  if (screen == Screen::Menu) {
+    if (selectorIndex == 0) {
+      openValues(FilterField::Authors);
+    } else if (selectorIndex == 1) {
+      openValues(FilterField::Series);
+    } else if (selectorIndex == 2) {
+      openValues(FilterField::Tags);
+    } else if (selectorIndex == 3) {
+      selectorIndex = static_cast<size_t>(viewState.sortMode);
+      screen = Screen::SortValues;
+      requestUpdate();
+    } else {
+      viewState.clearFilters();
+      requestUpdate();
+    }
+  } else if (screen == Screen::SortValues) {
+    const auto selectedMode = static_cast<LibrarySortMode>(selectorIndex);
+    if (viewState.sortMode != selectedMode) {
+      viewState.sortMode = selectedMode;
+      viewState.dirty = true;
+    }
+    requestUpdate();
+  } else if (selectorIndex == 0) {
+    auto& selected = selectedValues();
+    if (!selected.empty()) {
+      selected.clear();
+      viewState.dirty = true;
+    }
+    requestUpdate();
+  } else {
+    const auto& value = values[selectorIndex - 1];
+    auto& selected = selectedValues();
+    if (selected.contains(value)) {
+      selected.erase(value);
+    } else {
+      selected.insert(value);
+    }
+    viewState.dirty = true;
+    requestUpdate();
+  }
+}
+
 void LibraryFiltersActivity::loop() {
   if (lockBackRelease) {
     if (!mappedInput.isPressed(MappedInputManager::Button::Back)) {
@@ -176,46 +219,39 @@ void LibraryFiltersActivity::loop() {
                           : (screen == Screen::SortValues ? static_cast<int>(LibrarySortMode::Count)
                                                           : static_cast<int>(values.size()) + 1);
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (screen == Screen::Menu) {
-      if (selectorIndex == 0) {
-        openValues(FilterField::Authors);
-      } else if (selectorIndex == 1) {
-        openValues(FilterField::Series);
-      } else if (selectorIndex == 2) {
-        openValues(FilterField::Tags);
-      } else if (selectorIndex == 3) {
-        selectorIndex = static_cast<size_t>(viewState.sortMode);
-        screen = Screen::SortValues;
-        requestUpdate();
-      } else {
-        viewState.clearFilters();
-        requestUpdate();
-      }
-    } else if (screen == Screen::SortValues) {
-      const auto selectedMode = static_cast<LibrarySortMode>(selectorIndex);
-      if (viewState.sortMode != selectedMode) {
-        viewState.sortMode = selectedMode;
-        viewState.dirty = true;
-      }
-      requestUpdate();
-    } else if (selectorIndex == 0) {
-      auto& selected = selectedValues();
-      if (!selected.empty()) {
-        selected.clear();
-        viewState.dirty = true;
-      }
-      requestUpdate();
+    activateSelection();
+    return;
+  }
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int rowStep = GUI.getListRowStep(false);
+  const int pageItems = GUI.getListPageItems(contentHeight, false);
+  const int pageStart = static_cast<int>(selectorIndex) / pageItems * pageItems;
+  const int visibleRows = std::min(pageItems, itemCount - pageStart);
+  int row = -1;
+  const auto touch = mappedInput.rowTouch(row, contentTop, rowStep, visibleRows, 0, renderer.getScreenWidth(), rowStep);
+  if (touch != MappedInputManager::RowTouch::None) {
+    selectorIndex = static_cast<size_t>(pageStart + row);
+    if (touch == MappedInputManager::RowTouch::Tap) {
+      activateSelection();
     } else {
-      const auto& value = values[selectorIndex - 1];
-      auto& selected = selectedValues();
-      if (selected.contains(value)) {
-        selected.erase(value);
-      } else {
-        selected.insert(value);
-      }
-      viewState.dirty = true;
       requestUpdate();
     }
+    return;
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), itemCount, pageItems);
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), itemCount, pageItems);
+    requestUpdate();
     return;
   }
 

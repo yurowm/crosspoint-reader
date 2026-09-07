@@ -23,6 +23,7 @@ class LibraryFiltersActivity final : public Activity {
   bool lockBackRelease = false;
 
   void openValues(FilterField field);
+  void activateSelection();
   void rebuildValues();
   bool matchesOtherFilters(const LibraryBook& book) const;
   std::set<std::string>& selectedValues();
