@@ -1,6 +1,7 @@
 #include "TxtReaderActivity.h"
 
 #include <BidiUtils.h>
+#include <BoardConfig.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -356,7 +357,7 @@ void TxtReaderActivity::renderPage(GfxRenderer& renderer) {
 void TxtReaderActivity::renderStatusBar() const {
   const float progress = totalPages > 0 ? (currentPage + 1) * 100.0f / totalPages : 0;
   std::string title;
-  if (SETTINGS.statusBarSpec().showsTitle()) {
+  if (BoardConfig::isX4Pro() || SETTINGS.statusBarSpec().showsTitle()) {
     title = txt->getTitle();
   }
   GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);

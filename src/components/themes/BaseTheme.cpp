@@ -1131,80 +1131,58 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   if (BoardConfig::isX4Pro()) {
     const int screenWidth = renderer.getScreenWidth();
-    const int leftX = metrics.statusBarHorizontalMargin + orientedMarginLeft + 1;
-    const int rightX = screenWidth - metrics.statusBarHorizontalMargin - orientedMarginRight;
-    const int topY = orientedMarginTop + 2;
+    const int screenHeight = renderer.getScreenHeight();
+    constexpr int topPanelHeight = UITheme::X4_PRO_TOP_PANEL_HEIGHT;
+    constexpr int bottomPanelHeight = UITheme::X4_PRO_BOTTOM_PANEL_HEIGHT;
+    constexpr int horizontalPadding = 8;
+    const bool panelBlack = SETTINGS.screenInverted == 0;
+    const bool panelTextBlack = !panelBlack;
+    const bool batteryFillBlack = SETTINGS.screenInverted != 0;
+    const Color batteryColor = batteryFillBlack ? Color::Black : Color::White;
+    const bool batteryTextBlack = SETTINGS.screenInverted == 0;
+    renderer.fillRect(0, 0, screenWidth, topPanelHeight, panelBlack);
+    renderer.fillRect(0, screenHeight - bottomPanelHeight, screenWidth, bottomPanelHeight, panelBlack);
 
-    if (sb.showsClock() && halClock.isAvailable()) {
+    const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+    const int topTextY = (topPanelHeight - lineHeight) / 2;
+    if (halClock.isAvailable()) {
       char time[9];
       if (halClock.formatTime(time, sizeof(time), sb.clockUtcOffsetQ, sb.clock12h)) {
-        renderer.drawText(SMALL_FONT_ID, leftX, topY, time);
+        renderer.drawText(SMALL_FONT_ID, horizontalPadding, topTextY, time, panelTextBlack);
       }
     }
 
-    if (sb.showBattery) {
-      const uint16_t percentage = powerManager.getBatteryPercentage();
-      if (sb.showBatteryPercent) {
-        char batteryText[5];
-        snprintf(batteryText, sizeof(batteryText), "%u", static_cast<unsigned>(percentage));
-        const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, batteryText);
-        const int textHeight = renderer.getLineHeight(SMALL_FONT_ID);
-        const int pillWidth = textWidth + 12;
-        const int pillHeight = textHeight + 2;
-        const int pillX = rightX - pillWidth - 3;
-        renderer.fillRoundedRect(pillX, topY, pillWidth, pillHeight, 3, Color::Black);
-        renderer.fillRect(pillX + pillWidth, topY + pillHeight / 2 - 2, 3, 5, true);
-        renderer.drawText(SMALL_FONT_ID, pillX + 6, topY + 1, batteryText, false);
-      } else {
-        GUI.drawBatteryLeft(
-            renderer, Rect{rightX - metrics.batteryWidth, topY, metrics.batteryWidth, metrics.batteryHeight}, false);
-      }
-    }
+    char batteryText[5];
+    snprintf(batteryText, sizeof(batteryText), "%u", static_cast<unsigned>(powerManager.getBatteryPercentage()));
+    const int batteryTextWidth = renderer.getTextWidth(SMALL_FONT_ID, batteryText);
+    constexpr int batteryHeight = 20;
+    const int batteryWidth = batteryTextWidth + 12;
+    const int batteryX = screenWidth - horizontalPadding - batteryWidth - 3;
+    const int batteryY = (topPanelHeight - batteryHeight) / 2;
+    renderer.fillRoundedRect(batteryX, batteryY, batteryWidth, batteryHeight, 3, batteryColor);
+    renderer.fillRect(batteryX + batteryWidth, batteryY + 6, 3, 8, batteryFillBlack);
+    renderer.drawText(SMALL_FONT_ID, batteryX + (batteryWidth - batteryTextWidth) / 2, topTextY, batteryText,
+                      batteryTextBlack);
 
-    const int statusHeight = UITheme::getInstance().getStatusBarHeight();
-    int bottomY = renderer.getScreenHeight() - statusHeight - orientedMarginBottom - paddingBottom - 4;
-    int leftWidth = 0;
-    int rightWidth = 0;
+    const int bottomTextY = screenHeight - bottomPanelHeight + (bottomPanelHeight - lineHeight) / 2;
+    char progressText[8];
+    snprintf(progressText, sizeof(progressText), "%.0f%%", bookProgress);
+    renderer.drawText(SMALL_FONT_ID, horizontalPadding, bottomTextY, progressText, panelTextBlack);
+    const int leftWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText);
 
-    if (sb.showBookProgressPercent) {
-      char progressText[8];
-      snprintf(progressText, sizeof(progressText), "%.0f%%", bookProgress);
-      renderer.drawText(SMALL_FONT_ID, leftX, bottomY, progressText);
-      leftWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText);
-    }
-    if (showStatusBarTextLane && isPageBookmarked) {
-      const int bookmarkX = leftX + leftWidth + (leftWidth > 0 ? bookmarkStatusIconGap : 0);
-      drawBookmarkStatusIcon(renderer, bookmarkX, bottomY + 5);
-      leftWidth = bookmarkX + bookmarkStatusIconWidth - leftX;
-    }
-    if (sb.showChapterPageCount) {
-      char pageText[24];
-      snprintf(pageText, sizeof(pageText), pageCountEstimated ? "~%d/%d" : "%d/%d", currentPage, pageCount);
-      rightWidth = renderer.getTextWidth(SMALL_FONT_ID, pageText);
-      renderer.drawText(SMALL_FONT_ID, rightX - rightWidth, bottomY, pageText);
-    }
+    char pageText[24];
+    snprintf(pageText, sizeof(pageText), pageCountEstimated ? "~%d/%d" : "%d/%d", currentPage, pageCount);
+    const int rightWidth = renderer.getTextWidth(SMALL_FONT_ID, pageText);
+    renderer.drawText(SMALL_FONT_ID, screenWidth - horizontalPadding - rightWidth, bottomTextY, pageText,
+                      panelTextBlack);
+
     if (!title.empty()) {
-      bottomY -= textYOffset;
       const int sidePadding = 16;
       const int symmetricMargin = std::max(leftWidth, rightWidth) + sidePadding;
-      const int available = std::max(0, screenWidth - orientedMarginLeft - orientedMarginRight -
-                                            metrics.statusBarHorizontalMargin * 2 - symmetricMargin * 2);
+      const int available = std::max(0, screenWidth - horizontalPadding * 2 - symmetricMargin * 2);
       title = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), available);
       const int titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-      renderer.drawText(SMALL_FONT_ID, (screenWidth - titleWidth) / 2, bottomY, title.c_str());
-    }
-
-    if (sb.showsProgressBar()) {
-      const int barMarginLeft = fillMargin ? 0 : orientedMarginLeft;
-      const int barMarginRight = fillMargin ? 0 : orientedMarginRight;
-      const int maxWidth = screenWidth - barMarginLeft - barMarginRight;
-      const int barY = renderer.getScreenHeight() - orientedMarginBottom - sb.progressBarHeightPx - paddingBottom +
-                       (fillMargin ? 1 : 0);
-      const size_t progress = sb.progressBarMode == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS
-                                  ? static_cast<size_t>(bookProgress)
-                                  : (pageCount > 0 ? static_cast<size_t>(currentPage * 100 / pageCount) : 0);
-      renderer.fillRect(barMarginLeft, barY, maxWidth * progress / 100,
-                        sb.progressBarHeightPx + (fillMargin ? orientedMarginBottom - 1 : 0), true);
+      renderer.drawText(SMALL_FONT_ID, (screenWidth - titleWidth) / 2, bottomTextY, title.c_str(), panelTextBlack);
     }
     return;
   }

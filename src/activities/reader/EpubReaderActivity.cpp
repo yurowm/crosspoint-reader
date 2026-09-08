@@ -1,5 +1,6 @@
 #include "EpubReaderActivity.h"
 
+#include <BoardConfig.h>
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
@@ -1774,7 +1775,7 @@ void EpubReaderActivity::renderStatusBar() const {
     if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
       textYOffset += UITheme::getInstance().getMetrics().statusBarVerticalMargin;
     }
-  } else if (sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
+  } else if (BoardConfig::isX4Pro() || sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     title = tr(STR_UNNAMED);
     if (epub) {
       const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);

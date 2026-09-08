@@ -1,5 +1,6 @@
 #include "XtcReaderActivity.h"
 
+#include <BoardConfig.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -97,7 +98,7 @@ XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
     return StatusBarInfo{bookPage, bookPageCount, std::move(title)};
   }
 
-  if (sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
+  if (BoardConfig::isX4Pro() || sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     title = chapterIt->name.empty() ? tr(STR_UNNAMED) : chapterIt->name;
   }
 

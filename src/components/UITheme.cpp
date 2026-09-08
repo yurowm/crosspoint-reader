@@ -150,23 +150,13 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
 int UITheme::getStatusBarHeight() {
   const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
   const auto sb = SETTINGS.statusBarSpec();
-  const bool textLane = BoardConfig::isX4Pro()
-                            ? (sb.showChapterPageCount || sb.showBookProgressPercent || sb.showsTitle())
-                            : sb.textLaneVisible(true);
+  if (BoardConfig::isX4Pro()) return X4_PRO_BOTTOM_PANEL_HEIGHT;
 
-  // X4 Pro renders power and clock in a separate top lane. Other devices keep
-  // every enabled item in the footer.
-  return (textLane ? metrics.statusBarVerticalMargin : 0) +
+  return (sb.textLaneVisible(true) ? metrics.statusBarVerticalMargin : 0) +
          (sb.showsProgressBar() ? (sb.progressBarHeightPx + metrics.progressBarMarginTop) : 0);
 }
 
-int UITheme::getTopStatusBarHeight() {
-  if (!BoardConfig::isX4Pro()) return 0;
-  const auto sb = SETTINGS.statusBarSpec();
-  return (sb.showBattery || (sb.showsClock() && halClock.isAvailable()))
-             ? getInstance().getMetrics().statusBarVerticalMargin
-             : 0;
-}
+int UITheme::getTopStatusBarHeight() { return BoardConfig::isX4Pro() ? X4_PRO_TOP_PANEL_HEIGHT : 0; }
 
 int UITheme::getProgressBarHeight() {
   const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
