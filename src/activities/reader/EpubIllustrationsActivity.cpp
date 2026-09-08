@@ -1,13 +1,14 @@
 #include "EpubIllustrationsActivity.h"
 
-#include <Epub/converters/ImageDecoderFactory.h>
-#include <Epub/converters/ImageToFramebufferDecoder.h>
+#include <Bitmap.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <PngToBmpConverter.h>
 
 #include <algorithm>
 
@@ -29,9 +30,14 @@ void EpubIllustrationsActivity::onEnter() {
 }
 
 void EpubIllustrationsActivity::clearExtracted() {
-  if (extractedPath.empty()) return;
-  Storage.remove(extractedPath.c_str());
-  extractedPath.clear();
+  if (!extractedPath.empty()) {
+    Storage.remove(extractedPath.c_str());
+    extractedPath.clear();
+  }
+  if (!convertedPath.empty()) {
+    Storage.remove(convertedPath.c_str());
+    convertedPath.clear();
+  }
 }
 
 void EpubIllustrationsActivity::onExit() {
@@ -54,41 +60,85 @@ bool EpubIllustrationsActivity::extractCurrent() {
   return false;
 }
 
-bool EpubIllustrationsActivity::drawCurrent() {
-  if (!extractCurrent()) return false;
+bool EpubIllustrationsActivity::convertCurrent() {
+  if (extractedPath.empty()) return false;
 
-  ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(extractedPath);
-  if (!decoder) return false;
-
-  ImageDimensions dimensions{};
-  if (!decoder->getDimensions(extractedPath, dimensions) || dimensions.width <= 0 || dimensions.height <= 0) {
+  convertedPath = epub->getCachePath() + "/.illustration.bmp";
+  HalFile source;
+  HalFile output;
+  if (!Storage.openFileForRead("ILL", extractedPath, source) ||
+      !Storage.openFileForWrite("ILL", convertedPath, output)) {
+    if (source.isOpen()) source.close();
+    if (output.isOpen()) output.close();
+    Storage.remove(convertedPath.c_str());
+    convertedPath.clear();
     return false;
   }
 
-  const float scale = std::min(static_cast<float>(renderer.getScreenWidth()) / dimensions.width,
-                               static_cast<float>(renderer.getScreenHeight()) / dimensions.height);
-  const int width = std::max(1, std::min(renderer.getScreenWidth(), static_cast<int>(dimensions.width * scale)));
-  const int height = std::max(1, std::min(renderer.getScreenHeight(), static_cast<int>(dimensions.height * scale)));
-  RenderConfig config;
-  config.x = (renderer.getScreenWidth() - width) / 2;
-  config.y = (renderer.getScreenHeight() - height) / 2;
-  config.maxWidth = width;
-  config.maxHeight = height;
-  config.useGrayscale = true;
-  config.useDithering = true;
-  config.useExactDimensions = true;
-  return decoder->decodeToFramebuffer(extractedPath, renderer, config);
+  // Use the same area-aware scaling and Atkinson error-diffusion pipeline as
+  // full-screen book covers. The resulting BMP still contains the panel's four
+  // native levels, but error diffusion preserves the apparent tonal range.
+  const bool success = FsHelpers::hasPngExtension(extractedPath)
+                           ? PngToBmpConverter::pngFileToBmpStream(source, output, false)
+                           : JpegToBmpConverter::jpegFileToBmpStream(source, output, false);
+  output.close();
+  source.close();
+  if (success) return true;
+
+  Storage.remove(convertedPath.c_str());
+  convertedPath.clear();
+  return false;
+}
+
+bool EpubIllustrationsActivity::drawCurrent() {
+  if (!extractCurrent() || !convertCurrent()) return false;
+
+  HalFile file;
+  if (!Storage.openFileForRead("ILL", convertedPath, file)) return false;
+  Bitmap bitmap(file, false);
+  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+    file.close();
+    return false;
+  }
+
+  const int screenWidth = renderer.getScreenWidth();
+  const int screenHeight = renderer.getScreenHeight();
+  const int x = (screenWidth - bitmap.getWidth()) / 2;
+  const int y = (screenHeight - bitmap.getHeight()) / 2;
+
+  renderer.drawBitmap(bitmap, x, y, screenWidth, screenHeight);
+  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+
+  bitmap.rewindToData();
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  renderer.drawBitmap(bitmap, x, y, screenWidth, screenHeight);
+  renderer.copyGrayscaleLsbBuffers();
+
+  bitmap.rewindToData();
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+  renderer.drawBitmap(bitmap, x, y, screenWidth, screenHeight);
+  renderer.copyGrayscaleMsbBuffers();
+  renderer.displayGrayBuffer();
+  renderer.setRenderMode(GfxRenderer::BW);
+  file.close();
+  return true;
 }
 
 void EpubIllustrationsActivity::render(RenderLock&&) {
   renderer.clearScreen();
+  bool displayed = false;
   if (illustrations.empty()) {
     renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2, tr(STR_NO_ILLUSTRATIONS));
-  } else if (!drawCurrent()) {
-    renderer.clearScreen();
-    renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2, tr(STR_FILE_OPEN_FAILED));
+  } else {
+    displayed = drawCurrent();
+    if (!displayed) {
+      renderer.clearScreen();
+      renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2, tr(STR_FILE_OPEN_FAILED));
+    }
   }
-  ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+  if (!displayed) ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 }
 
 void EpubIllustrationsActivity::turn(const int direction) {

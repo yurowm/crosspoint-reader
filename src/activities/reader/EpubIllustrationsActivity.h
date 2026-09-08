@@ -21,10 +21,12 @@ class EpubIllustrationsActivity final : public Activity {
   std::shared_ptr<Epub> epub;
   std::vector<std::string> illustrations;
   std::string extractedPath;
+  std::string convertedPath;
   int currentIndex = 0;
   int pagesUntilFullRefresh = 1;
 
   bool extractCurrent();
+  bool convertCurrent();
   bool drawCurrent();
   void turn(int direction);
   void clearExtracted();
