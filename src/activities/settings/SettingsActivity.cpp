@@ -31,30 +31,13 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "components/icons/listIcons.h"
-#include "components/icons/toggleRightFilled.h"
+#include "components/icons/toggleIcons.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
 
 namespace {
-constexpr int TOGGLE_SOURCE_SIZE = 24;
-constexpr int TOGGLE_SCALE = 2;
-constexpr int TOGGLE_DISPLAY_SIZE = TOGGLE_SOURCE_SIZE * TOGGLE_SCALE;
-
-void drawToggleIcon(const GfxRenderer& renderer, const uint8_t* bits, const int x, const int y, const bool state) {
-  constexpr int rowBytes = (TOGGLE_SOURCE_SIZE + 7) / 8;
-  for (int row = 0; row < TOGGLE_SOURCE_SIZE; ++row) {
-    for (int col = 0; col < TOGGLE_SOURCE_SIZE; ++col) {
-      const uint8_t byte = bits[row * rowBytes + (col >> 3)];
-      const bool ink = ((byte >> (7 - (col & 7))) & 1) == 0;
-      if (!ink) continue;
-
-      const int pixelX = x + col * TOGGLE_SCALE;
-      const int pixelY = y + row * TOGGLE_SCALE;
-      renderer.fillRect(pixelX, pixelY, TOGGLE_SCALE, TOGGLE_SCALE, state);
-    }
-  }
-}
+constexpr int TOGGLE_DISPLAY_SIZE = 48;
 
 fui::BitmapRef settingsIcon(const StrId id) {
   switch (id) {
@@ -658,11 +641,11 @@ void SettingsActivity::render(RenderLock&&) {
     for (int index = first; index < end; index++) {
       const auto& setting = (*currentSettings)[static_cast<size_t>(index)];
       if (!usesToggleIcon(setting)) continue;
-      const auto& icon = toggleIconChecked(setting) ? icon_toggle_right_filled_24 : icon_toggle_left_24;
+      const auto& icon = toggleIconChecked(setting) ? icon_toggle_right_filled_48 : icon_toggle_left_48;
       const int x = compactListX_ + compactListWidth_ - VALUE_INSET - TOGGLE_DISPLAY_SIZE;
       const int y = compactListY_ + (index - first) * compactRowHeight_ + (compactRowHeight_ - TOGGLE_DISPLAY_SIZE) / 2;
       const bool selected = ringPos() - 1 == index;
-      drawToggleIcon(renderer, icon.bits, x, y, !selected);
+      renderer.drawNativeIcon(icon.bits, x, y, TOGGLE_DISPLAY_SIZE, !selected);
     }
   }
 
