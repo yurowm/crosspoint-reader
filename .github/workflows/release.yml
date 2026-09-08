@@ -1,7 +1,7 @@
 name: Compile Release
 
-# Builds the X4 and X4 Pro release firmware on tag push. Asset names match what
-# OtaUpdater requests for each board through releases/latest.
+# Builds the X4 Pro release firmware on tag push. The asset name matches what
+# OtaUpdater requests through releases/latest.
 
 on:
   push:
@@ -13,18 +13,11 @@ permissions:
 
 jobs:
   build-release:
-    name: Build ${{ matrix.pio_env }}
+    name: Build X4 Pro
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - pio_env: gh_release
-            asset: firmware.bin
-            artifact: release-x4
-          - pio_env: x4pro-gh_release
-            asset: firmware-x4pro.bin
-            artifact: release-x4pro
+    env:
+      PIO_ENV: x4pro-gh_release
+      ASSET: firmware-x4pro.bin
     steps:
       - uses: actions/checkout@v6
         with:
@@ -59,25 +52,22 @@ jobs:
           restore-keys: pio-${{ runner.os }}-
 
       - name: Build CrossPoint
-        run: pio run -e ${{ matrix.pio_env }} -j1
+        run: pio run -e "${PIO_ENV}" -j1
 
       - name: Name release asset
         run: |
-          if [ "${{ matrix.asset }}" != "firmware.bin" ]; then
-            cp ".pio/build/${{ matrix.pio_env }}/firmware.bin" \
-              ".pio/build/${{ matrix.pio_env }}/${{ matrix.asset }}"
-          fi
+          cp ".pio/build/${PIO_ENV}/firmware.bin" ".pio/build/${PIO_ENV}/${ASSET}"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: release-x4pro
           path: |
-            .pio/build/${{ matrix.pio_env }}/bootloader.bin
-            .pio/build/${{ matrix.pio_env }}/${{ matrix.asset }}
-            .pio/build/${{ matrix.pio_env }}/firmware.elf
-            .pio/build/${{ matrix.pio_env }}/firmware.map
-            .pio/build/${{ matrix.pio_env }}/partitions.bin
+            .pio/build/x4pro-gh_release/bootloader.bin
+            .pio/build/x4pro-gh_release/firmware-x4pro.bin
+            .pio/build/x4pro-gh_release/firmware.elf
+            .pio/build/x4pro-gh_release/firmware.map
+            .pio/build/x4pro-gh_release/partitions.bin
 
   publish-release:
     name: Publish GitHub Release
@@ -107,12 +97,6 @@ jobs:
       - name: Stage OTA assets
         run: |
           mkdir release
-          SOURCE=$(find dist -type f -name firmware.bin -print -quit)
-          if [ -z "${SOURCE}" ]; then
-            echo "Missing release asset: firmware.bin" >&2
-            exit 1
-          fi
-          cp "${SOURCE}" release/firmware.bin
           X4PRO_SOURCE=$(find dist -type f -name firmware-x4pro.bin -print -quit)
           if [ -z "${X4PRO_SOURCE}" ]; then
             echo "Missing release asset: firmware-x4pro.bin" >&2
@@ -133,7 +117,6 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --yes 2>/dev/null || true
           gh release create "${GITHUB_REF_NAME}" \
-            release/firmware.bin \
             release/firmware-x4pro.bin \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${VERSION}" \
