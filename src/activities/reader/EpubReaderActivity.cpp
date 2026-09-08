@@ -23,6 +23,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
+#include "EpubIllustrationsActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
@@ -896,6 +897,16 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                  static_cast<uint16_t>(std::clamp(progressBasisPoints, 0,
                                                                   static_cast<int>(ReadingStats::PROGRESS_COMPLETE)))),
                              [this](const ActivityResult&) { openReaderMenu(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::ILLUSTRATIONS: {
+      auto viewer = makeUniqueNoThrow<EpubIllustrationsActivity>(renderer, mappedInput, epub);
+      if (!viewer) {
+        LOG_ERR("ERS", "OOM: illustrations activity");
+        requestUpdate();
+        break;
+      }
+      startActivityForResult(std::move(viewer), [this](const ActivityResult&) { openReaderMenu(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {

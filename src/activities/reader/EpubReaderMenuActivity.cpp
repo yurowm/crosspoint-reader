@@ -1,5 +1,6 @@
 #include "EpubReaderMenuActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalFrontlight.h>
 #include <I18n.h>
@@ -58,6 +59,9 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, bool h
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
   items.push_back({MenuAction::STATISTICS, StrId::STR_BOOK_STATS});
+  if (BoardConfig::isX4Pro()) {
+    items.push_back({MenuAction::ILLUSTRATIONS, StrId::STR_ILLUSTRATIONS});
+  }
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
   items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});

@@ -799,9 +799,7 @@ bool Epub::generateCoverBmp(bool cropped) const {
 }
 
 std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb_[HEIGHT].bmp"; }
-std::string Epub::getThumbBmpPath(int height) const {
-  return cachePath + "/thumb_" + std::to_string(height) + ".bmp";
-}
+std::string Epub::getThumbBmpPath(int height) const { return cachePath + "/thumb_" + std::to_string(height) + ".bmp"; }
 
 bool Epub::generateThumbBmp(int height) const {
   // Already generated, return true
@@ -945,6 +943,27 @@ bool Epub::extractItemToFile(const std::string& itemHref, const std::string& des
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
   return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
+}
+
+bool Epub::listIllustrations(std::vector<std::string>& paths) const {
+  paths.clear();
+  paths.reserve(32);
+
+  const std::string coverPath =
+      bookMetadataCache ? FsHelpers::normalisePath(bookMetadataCache->coreMetadata.coverItemHref) : std::string{};
+  const bool enumerated = ZipFile(filepath).enumerateFilePaths([&](const std::string_view path) {
+    if (!FsHelpers::hasJpgExtension(path) && !FsHelpers::hasPngExtension(path)) return;
+    const std::string normalized = FsHelpers::normalisePath(path);
+    if (!coverPath.empty() && normalized == coverPath) return;
+    if (std::find(paths.begin(), paths.end(), normalized) == paths.end()) paths.push_back(normalized);
+  });
+  if (!enumerated) {
+    paths.clear();
+    return false;
+  }
+
+  FsHelpers::sortFileList(paths);
+  return true;
 }
 
 bool Epub::countVisibleCharacters(uint32_t& count) const {
