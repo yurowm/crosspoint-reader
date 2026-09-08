@@ -13,8 +13,9 @@ class UITheme {
   static UITheme instance;
 
  public:
-  static constexpr int X4_PRO_TOP_PANEL_HEIGHT = 28;
-  static constexpr int X4_PRO_BOTTOM_PANEL_HEIGHT = 42;
+  static constexpr int X4_PRO_TOP_PANEL_CONTENT_OFFSET = 6;
+  static constexpr int X4_PRO_TOP_PANEL_HEIGHT = 34;
+  static constexpr int X4_PRO_BOTTOM_PANEL_HEIGHT = 36;
 
   enum class TextVerticalAlignment { TOP, CENTER, BOTTOM };
 

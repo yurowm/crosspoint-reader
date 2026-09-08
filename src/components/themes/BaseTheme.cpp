@@ -1144,7 +1144,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     renderer.fillRect(0, screenHeight - bottomPanelHeight, screenWidth, bottomPanelHeight, panelBlack);
 
     const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
-    const int topTextY = (topPanelHeight - lineHeight) / 2;
+    const int topTextY = UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET +
+                         (topPanelHeight - UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET - lineHeight) / 2;
     if (halClock.isAvailable()) {
       char time[9];
       if (halClock.formatTime(time, sizeof(time), sb.clockUtcOffsetQ, sb.clock12h)) {
@@ -1158,7 +1159,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     constexpr int batteryHeight = 20;
     const int batteryWidth = batteryTextWidth + 12;
     const int batteryX = screenWidth - horizontalPadding - batteryWidth - 3;
-    const int batteryY = (topPanelHeight - batteryHeight) / 2;
+    const int batteryY = UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET +
+                         (topPanelHeight - UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET - batteryHeight) / 2;
     renderer.fillRoundedRect(batteryX, batteryY, batteryWidth, batteryHeight, 3, batteryColor);
     renderer.fillRect(batteryX + batteryWidth, batteryY + 6, 3, 8, batteryFillBlack);
     renderer.drawText(SMALL_FONT_ID, batteryX + (batteryWidth - batteryTextWidth) / 2, topTextY, batteryText,
