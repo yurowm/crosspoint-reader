@@ -953,7 +953,7 @@ bool Epub::listIllustrations(std::vector<std::string>& paths) const {
       bookMetadataCache ? FsHelpers::normalisePath(bookMetadataCache->coreMetadata.coverItemHref) : std::string{};
   const bool enumerated = ZipFile(filepath).enumerateFilePaths([&](const std::string_view path) {
     if (!FsHelpers::hasJpgExtension(path) && !FsHelpers::hasPngExtension(path)) return;
-    const std::string normalized = FsHelpers::normalisePath(path);
+    const std::string normalized = FsHelpers::normalisePath(std::string{path});
     if (!coverPath.empty() && normalized == coverPath) return;
     if (std::find(paths.begin(), paths.end(), normalized) == paths.end()) paths.push_back(normalized);
   });
