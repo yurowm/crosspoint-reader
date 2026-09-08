@@ -71,6 +71,7 @@ void TxtReaderActivity::initializeReader(GfxRenderer& renderer) {
   renderer.getOrientedViewableTRBL(&cachedOrientedMarginTop, &cachedOrientedMarginRight, &cachedOrientedMarginBottom,
                                    &cachedOrientedMarginLeft);
   cachedOrientedMarginTop += cachedScreenMargin;
+  cachedOrientedMarginTop += UITheme::getInstance().getTopStatusBarHeight();
   cachedOrientedMarginLeft += cachedScreenMargin;
   cachedOrientedMarginRight += cachedScreenMargin;
   const int statusBarHeight = UITheme::getInstance().getStatusBarHeight();

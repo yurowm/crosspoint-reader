@@ -88,6 +88,7 @@ uint32_t charactersPerPage(const GfxRenderer& renderer) {
   int left = 0;
   orientedInsets(orientation, top, right, bottom, left);
   top += SETTINGS.screenMargin;
+  top += UITheme::getInstance().getTopStatusBarHeight();
   left += SETTINGS.screenMargin;
   right += SETTINGS.screenMargin;
   const int statusBarHeight = UITheme::getInstance().getStatusBarHeight();
@@ -115,8 +116,7 @@ uint32_t charactersPerPage(const GfxRenderer& renderer) {
 
 uint32_t pageCount(const uint32_t visibleCharacters, const uint32_t charactersPerPage) {
   if (visibleCharacters == 0 || charactersPerPage == 0) return 0;
-  return static_cast<uint32_t>((static_cast<uint64_t>(visibleCharacters) + charactersPerPage - 1) /
-                               charactersPerPage);
+  return static_cast<uint32_t>((static_cast<uint64_t>(visibleCharacters) + charactersPerPage - 1) / charactersPerPage);
 }
 
 }  // namespace BookPageEstimator

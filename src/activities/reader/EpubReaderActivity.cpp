@@ -343,6 +343,7 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
   orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginTop += UITheme::getInstance().getTopStatusBarHeight();
   orientedMarginLeft += SETTINGS.screenMargin;
 
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
@@ -1176,6 +1177,7 @@ void EpubReaderActivity::renderBook() {
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
   orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginTop += UITheme::getInstance().getTopStatusBarHeight();
   orientedMarginLeft += SETTINGS.screenMargin;
   orientedMarginRight += SETTINGS.screenMargin;
 

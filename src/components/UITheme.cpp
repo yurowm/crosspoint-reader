@@ -1,7 +1,9 @@
 #include "UITheme.h"
 
+#include <BoardConfig.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalGPIO.h>
 #include <Logging.h>
 
@@ -148,11 +150,22 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
 int UITheme::getStatusBarHeight() {
   const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
   const auto sb = SETTINGS.statusBarSpec();
+  const bool textLane = BoardConfig::isX4Pro()
+                            ? (sb.showChapterPageCount || sb.showBookProgressPercent || sb.showsTitle())
+                            : sb.textLaneVisible(true);
 
-  // Layout reservation is hardware-agnostic: pass clockAvailable=true so the
-  // reserved height does not depend on whether an RTC is present.
-  return (sb.textLaneVisible(true) ? (metrics.statusBarVerticalMargin) : 0) +
+  // X4 Pro renders power and clock in a separate top lane. Other devices keep
+  // every enabled item in the footer.
+  return (textLane ? metrics.statusBarVerticalMargin : 0) +
          (sb.showsProgressBar() ? (sb.progressBarHeightPx + metrics.progressBarMarginTop) : 0);
+}
+
+int UITheme::getTopStatusBarHeight() {
+  if (!BoardConfig::isX4Pro()) return 0;
+  const auto sb = SETTINGS.statusBarSpec();
+  return (sb.showBattery || (sb.showsClock() && halClock.isAvailable()))
+             ? getInstance().getMetrics().statusBarVerticalMargin
+             : 0;
 }
 
 int UITheme::getProgressBarHeight() {
