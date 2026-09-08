@@ -37,7 +37,7 @@
 namespace fui = freeink::ui;
 
 namespace {
-constexpr int TOGGLE_DISPLAY_SIZE = 48;
+constexpr int TOGGLE_DISPLAY_SIZE = 32;
 
 fui::BitmapRef settingsIcon(const StrId id) {
   switch (id) {
@@ -641,7 +641,7 @@ void SettingsActivity::render(RenderLock&&) {
     for (int index = first; index < end; index++) {
       const auto& setting = (*currentSettings)[static_cast<size_t>(index)];
       if (!usesToggleIcon(setting)) continue;
-      const auto& icon = toggleIconChecked(setting) ? icon_toggle_right_filled_48 : icon_toggle_left_48;
+      const auto& icon = toggleIconChecked(setting) ? icon_toggle_right_filled_32 : icon_toggle_left_32;
       const int x = compactListX_ + compactListWidth_ - VALUE_INSET - TOGGLE_DISPLAY_SIZE;
       const int y = compactListY_ + (index - first) * compactRowHeight_ + (compactRowHeight_ - TOGGLE_DISPLAY_SIZE) / 2;
       const bool selected = ringPos() - 1 == index;
