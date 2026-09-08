@@ -13,29 +13,30 @@ void HalClock::begin() {
 }
 
 bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
+  uint16_t year;
+  uint8_t month, day, second;
+  return getDateTime(year, month, day, hour, minute, second);
+}
+
+bool HalClock::getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute,
+                           uint8_t& second) const {
   if (!_available) return false;
 
   const unsigned long now = millis();
-  if (_lastPollMs != 0 && (now - _lastPollMs) < CLOCK_POLL_MS) {
-    hour = _cachedHour;
-    minute = _cachedMinute;
-    return true;
-  }
-
-  Rtc::DateTime dt;
-  if (!_sdkRtc.now(dt)) {
-    if (!_hasCachedTime) return false;
+  if (_lastPollMs == 0 || (now - _lastPollMs) >= CLOCK_POLL_MS) {
+    if (!_sdkRtc.now(_cachedDateTime)) {
+      if (!_hasCachedTime) return false;
+    } else {
+      _hasCachedTime = true;
+    }
     _lastPollMs = now;
-    hour = _cachedHour;
-    minute = _cachedMinute;
-    return true;
   }
-  _cachedHour = dt.hour;
-  _cachedMinute = dt.minute;
-  _lastPollMs = now;
-  _hasCachedTime = true;
-  hour = _cachedHour;
-  minute = _cachedMinute;
+  year = _cachedDateTime.year;
+  month = _cachedDateTime.month;
+  day = _cachedDateTime.day;
+  hour = _cachedDateTime.hour;
+  minute = _cachedDateTime.minute;
+  second = _cachedDateTime.second;
   return true;
 }
 
@@ -95,8 +96,7 @@ bool HalClock::syncFromNTP() {
       dt.weekday = static_cast<uint8_t>(timeinfo.tm_wday);
       if (_sdkRtc.set(dt)) {
         _lastPollMs = 0;
-        _cachedHour = dt.hour;
-        _cachedMinute = dt.minute;
+        _cachedDateTime = dt;
         _hasCachedTime = true;
         LOG_INF("CLK", "RTC set to %04u-%02u-%02u %02u:%02u:%02u UTC", dt.year, dt.month, dt.day, dt.hour, dt.minute,
                 dt.second);

@@ -159,6 +159,10 @@ void ActivityManager::loop() {
           handler(pendingResult);
         }
 
+        if (pendingAction == PendingAction::None && currentActivity->isReaderActivity()) {
+          READING_STATS.resumeTiming();
+        }
+
         // Request an update to ensure the popped activity gets re-rendered
         if (pendingAction == PendingAction::None) {
           requestUpdate();
@@ -182,6 +186,7 @@ void ActivityManager::loop() {
         }
       } else if (pendingAction == PendingAction::Push) {
         // Move current activity to stack
+        if (currentActivity->isReaderActivity()) READING_STATS.pauseTiming();
         stackActivities.push_back(std::move(currentActivity));
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
       }

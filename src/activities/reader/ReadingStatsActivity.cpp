@@ -34,6 +34,23 @@ void formatReadingSpeed(const ReadingStatsData& stats, char* value, const size_t
            static_cast<unsigned long>(pagesPerMinuteHundredths % 100));
 }
 
+void drawCalendarRows(GfxRenderer& renderer, int& y, const ReadingStatsData& stats) {
+  char value[32];
+  ReadingStats::formatDuration(ReadingStats::todaySeconds(stats), value, sizeof(value));
+  drawRow(renderer, y, tr(STR_READING_TODAY), value);
+  y += UITheme::getInstance().getMetrics().listRowHeight;
+  ReadingStats::formatDuration(ReadingStats::recentDaysSeconds(stats, 7), value, sizeof(value));
+  drawRow(renderer, y, tr(STR_READING_LAST_7_DAYS), value);
+  y += UITheme::getInstance().getMetrics().listRowHeight;
+  ReadingStats::formatDuration(ReadingStats::recentDaysSeconds(stats, 30), value, sizeof(value));
+  drawRow(renderer, y, tr(STR_READING_LAST_30_DAYS), value);
+  y += UITheme::getInstance().getMetrics().listRowHeight;
+  snprintf(value, sizeof(value), tr(STR_READING_STREAK_VALUE), ReadingStats::currentStreak(stats),
+           ReadingStats::longestStreak(stats));
+  drawRow(renderer, y, tr(STR_READING_STREAK), value);
+  y += UITheme::getInstance().getMetrics().listRowHeight;
+}
+
 std::string filenameStem(const std::string& path) {
   const size_t slash = path.find_last_of('/');
   const size_t start = slash == std::string::npos ? 0 : slash + 1;
@@ -125,6 +142,7 @@ void ReadingStatsActivity::render(RenderLock&&) {
   drawRow(renderer, y, tr(STR_READING_TIME), value);
   y += metrics.listRowHeight;
   if (bookPath.empty()) {
+    drawCalendarRows(renderer, y, stats);
     snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(stats.completedBooks));
     drawRow(renderer, y, tr(STR_BOOKS_COMPLETED), value);
     y += metrics.listRowHeight;
@@ -155,6 +173,7 @@ void ReadingStatsActivity::render(RenderLock&&) {
       drawRow(renderer, y, tr(STR_AVERAGE_SESSION), value);
     }
   } else {
+    drawCalendarRows(renderer, y, stats);
     formatReadingSpeed(stats, value, sizeof(value));
     if (value[0] != '\0') {
       drawRow(renderer, y, tr(STR_READING_SPEED), value);
