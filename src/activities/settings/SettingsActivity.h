@@ -174,6 +174,10 @@ class SettingsActivity final : public UiTabListActivity {
   // strings (no vector growth).
   std::vector<std::string> rowValues_;
   std::vector<freeink::ui::ListItem> rowItems_;
+  int16_t compactListX_ = 0;
+  int16_t compactListY_ = 0;
+  int16_t compactListWidth_ = 0;
+  int16_t compactRowHeight_ = 0;
   void rebuildRowItems();
 
   static constexpr int categoryCount = 4;

@@ -77,7 +77,7 @@ void UiTabListActivity::navigateButtons() {
 void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
   const int count = listCount();
   auto& n = activeNav();
-  int16_t rowHeight = screen.theme().rowHeight;
+  int16_t rowHeight = props.rowHeight > 0 ? props.rowHeight : screen.theme().rowHeight;
   if (!mappedInput.hasTouch()) {
     // Non-touch hardware (X3/X4) keeps the original, denser per-theme row
     // height instead of FreeInkUI's touch-target-sized default (see

@@ -30,9 +30,94 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
+#include "components/icons/listIcons.h"
+#include "components/icons/toggleRightFilled.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
+
+namespace {
+fui::BitmapRef settingsIcon(const StrId id) {
+  switch (id) {
+    case StrId::STR_SLEEP_SCREEN:
+      return fui::bitmapFromIcon(icon_settings_sleep_screen_24);
+    case StrId::STR_SLEEP_COVER_MODE:
+      return fui::bitmapFromIcon(icon_settings_cover_24);
+    case StrId::STR_SLEEP_COVER_FILTER:
+      return fui::bitmapFromIcon(icon_settings_filter_24);
+    case StrId::STR_QUICK_RESUME_TIMEOUT:
+      return fui::bitmapFromIcon(icon_settings_resume_24);
+    case StrId::STR_HIDE_BATTERY:
+      return fui::bitmapFromIcon(icon_settings_battery_24);
+    case StrId::STR_REFRESH_FREQ:
+      return fui::bitmapFromIcon(icon_settings_refresh_24);
+    case StrId::STR_UI_THEME:
+      return fui::bitmapFromIcon(icon_settings_theme_24);
+    case StrId::STR_RESTORE_LIGHT_ON_WAKE:
+      return fui::bitmapFromIcon(icon_settings_light_24);
+    case StrId::STR_NIGHT_MODE:
+      return fui::bitmapFromIcon(icon_settings_night_24);
+    case StrId::STR_TEXT_SETTINGS:
+      return fui::bitmapFromIcon(icon_settings_text_24);
+    case StrId::STR_MANAGE_FONTS:
+      return fui::bitmapFromIcon(icon_settings_fonts_24);
+    case StrId::STR_ORIENTATION:
+      return fui::bitmapFromIcon(icon_settings_orientation_24);
+    case StrId::STR_IMAGES:
+      return fui::bitmapFromIcon(icon_image_24);
+    case StrId::STR_READER_MENU_STYLE:
+      return fui::bitmapFromIcon(icon_settings_menu_24);
+    case StrId::STR_DICTIONARY:
+      return fui::bitmapFromIcon(icon_settings_dictionary_24);
+    case StrId::STR_CUSTOMISE_STATUS_BAR:
+      return fui::bitmapFromIcon(icon_settings_status_bar_24);
+    case StrId::STR_SIDE_BTN_LAYOUT:
+      return fui::bitmapFromIcon(icon_settings_buttons_24);
+    case StrId::STR_TOUCH_READER_CONTROLS:
+      return fui::bitmapFromIcon(icon_settings_touch_24);
+    case StrId::STR_SHOW_READER_MENU:
+      return fui::bitmapFromIcon(icon_settings_menu_24);
+    case StrId::STR_LONG_PRESS_BEHAVIOR:
+    case StrId::STR_LONG_PRESS_MENU:
+      return fui::bitmapFromIcon(icon_settings_press_24);
+    case StrId::STR_SHORT_PWR_BTN:
+      return fui::bitmapFromIcon(icon_settings_power_24);
+    case StrId::STR_PWR_BTN_FOOTNOTE_BACK:
+      return fui::bitmapFromIcon(icon_settings_back_24);
+    case StrId::STR_TIME_TO_SLEEP:
+      return fui::bitmapFromIcon(icon_settings_timeout_24);
+    case StrId::STR_WIFI_NETWORKS:
+      return fui::bitmapFromIcon(icon_wifi_24);
+    case StrId::STR_KOREADER_SYNC:
+      return fui::bitmapFromIcon(icon_settings_sync_24);
+    case StrId::STR_OPDS_SERVERS:
+      return fui::bitmapFromIcon(icon_settings_server_24);
+    case StrId::STR_CLEAR_READING_CACHE:
+      return fui::bitmapFromIcon(icon_settings_cache_24);
+    case StrId::STR_CHECK_UPDATES:
+      return fui::bitmapFromIcon(icon_settings_update_24);
+    case StrId::STR_SD_FIRMWARE_UPDATE:
+      return fui::bitmapFromIcon(icon_settings_sd_update_24);
+    case StrId::STR_LANGUAGE:
+      return fui::bitmapFromIcon(icon_settings_language_24);
+    case StrId::STR_KEYBOARD_LAYOUTS:
+      return fui::bitmapFromIcon(icon_settings_keyboard_24);
+    default:
+      return fui::bitmapFromIcon(icon_settings_theme_24);
+  }
+}
+
+bool usesToggleIcon(const SettingInfo& setting) {
+  if (setting.type == SettingType::TOGGLE) return true;
+  return setting.type == SettingType::ENUM && setting.enumValues.size() == 2 &&
+         setting.enumValues[0] == StrId::STR_STATE_OFF && setting.enumValues[1] == StrId::STR_STATE_ON;
+}
+
+bool toggleIconChecked(const SettingInfo& setting) {
+  if (setting.valuePtr != nullptr) return SETTINGS.*(setting.valuePtr) != 0;
+  return setting.valueGetter && setting.valueGetter() != 0;
+}
+}  // namespace
 
 SettingsActivity::SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiTabListActivity("Settings", renderer, mappedInput) {}
@@ -165,6 +250,7 @@ void SettingsActivity::rebuildRowItems() {
   for (size_t i = 0; i < settings.size(); i++) {
     fui::ListItem item;
     item.label = I18N.get(settings[i].nameId);
+    item.icon = settingsIcon(settings[i].nameId);
     item.actionValue = static_cast<int16_t>(i);
     rowItems_.push_back(item);
   }
@@ -433,9 +519,7 @@ void SettingsActivity::openSleepTimeoutPicker() {
 }
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
-  if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
-    return SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-  }
+  if (usesToggleIcon(setting)) return "";
   if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Guard like the valueGetter branch below: a corrupt/migrated settings
     // byte must not index past the enum table.
@@ -485,6 +569,11 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   for (size_t i = 0; i < settings.size(); i++) {
     rowValues_[i] = settingValueText(settings[i]);
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    if (usesToggleIcon(settings[i])) {
+      // Reserve the trailing icon slot; the renderer overlay below supplies
+      // the state-specific Lucide bitmap after FreeInkUI paints the row.
+      rowItems_[i].value = "      ";
+    }
   }
 
   fui::ListProps props;
@@ -493,6 +582,16 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the value and the row edge
+  props.iconSize = 24;
+  if (BoardConfig::isX4Pro()) {
+    constexpr int TARGET_VISIBLE_ROWS = 10;
+    props.rowHeight = static_cast<int16_t>(screen.body().height / TARGET_VISIBLE_ROWS);
+    props.rowGap = 0;
+    compactListX_ = screen.body().x;
+    compactListY_ = screen.body().y;
+    compactListWidth_ = screen.body().width;
+    compactRowHeight_ = props.rowHeight;
+  }
   // Titles match the value's font size (smallText) so both sides of a row
   // read as one unit; labels that still don't fit wrap onto a second line.
   // maxLines=2 also marks the style explicitly set (an all-default smallText
@@ -502,6 +601,18 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   props.labelText.maxLines = 2;
   syncTabListViewport(screen, props);
   screen.list(props);
+  if (BoardConfig::isX4Pro() && compactRowHeight_ > 0) {
+    const int first = activeNav().top < 0 ? 0 : activeNav().top;
+    const int end = std::min(first + 10, settingsCount);
+    for (int index = first; index < end; index++) {
+      const fui::Rect row{compactListX_, static_cast<int16_t>(compactListY_ + (index - first) * compactRowHeight_),
+                          compactListWidth_, compactRowHeight_};
+      // Register exact compact-row bounds after the generic list targets.
+      // FreeInkUI resolves the newest matching target first, preventing the
+      // global 44 px touch minimum from making adjacent 10-row actions overlap.
+      screen.frame().hit(row, ACTION_ROW, static_cast<int16_t>(index), fui::InputTouch);
+    }
+  }
 }
 
 void SettingsActivity::render(RenderLock&&) {
@@ -520,6 +631,22 @@ void SettingsActivity::render(RenderLock&&) {
                  CROSSPOINT_VERSION);
 
   renderUi();
+
+  if (BoardConfig::isX4Pro() && compactRowHeight_ > 0 && currentSettings != nullptr) {
+    constexpr int ICON_SIZE = 24;
+    constexpr int VALUE_INSET = 8;
+    const int first = activeNav().top < 0 ? 0 : activeNav().top;
+    const int end = std::min(first + 10, settingsCount);
+    for (int index = first; index < end; index++) {
+      const auto& setting = (*currentSettings)[static_cast<size_t>(index)];
+      if (!usesToggleIcon(setting)) continue;
+      const auto& icon = toggleIconChecked(setting) ? icon_toggle_right_filled_24 : icon_toggle_left_24;
+      const int x = compactListX_ + compactListWidth_ - VALUE_INSET - ICON_SIZE;
+      const int y = compactListY_ + (index - first) * compactRowHeight_ + (compactRowHeight_ - ICON_SIZE) / 2;
+      const bool selected = ringPos() - 1 == index;
+      renderer.drawIcon(icon.bits, x, y, ICON_SIZE, !selected);
+    }
+  }
 
   const int ring = ringPos();
   const auto buttonHint = [ring](const MappedInputManager::NavigationAction action) {
