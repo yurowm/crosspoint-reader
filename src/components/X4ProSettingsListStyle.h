@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <FreeInkUI.h>
+#include <FreeInkUIIcon.h>
 
 namespace X4ProSettingsListStyle {
 
