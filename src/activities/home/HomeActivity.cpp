@@ -1,6 +1,5 @@
 #include "HomeActivity.h"
 
-#include <BoardConfig.h>
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -421,7 +420,7 @@ void HomeActivity::render(RenderLock&&) {
   // homeTopPadding, so the height must shrink by topPadding. The current-book
   // title is rendered in the card's metadata block, not in the header.
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding - metrics.topPadding},
-                 BoardConfig::isX4Pro() ? tr(STR_CROSSPOINT) : nullptr);
+                 nullptr);
 
   // Record the tile rect so storeCoverBuffer (called from the theme) knows
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
