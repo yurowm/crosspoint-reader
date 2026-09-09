@@ -1,5 +1,6 @@
 #include "XtcReaderChapterSelectionActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
@@ -124,6 +125,11 @@ void XtcReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
 void XtcReaderChapterSelectionActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+
+  if (BoardConfig::isX4Pro()) {
+    GUI.drawHeader(renderer, Rect{safe.x, safe.y, safe.width, metrics.headerHeight}, tr(STR_SELECT_CHAPTER));
+    return;
+  }
 
   // Centered title in the header band the content margin reserves.
   const int titleWidth = renderer.getTextWidth(UI_12_FONT_ID, tr(STR_SELECT_CHAPTER), EpdFontFamily::BOLD);

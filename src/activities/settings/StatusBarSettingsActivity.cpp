@@ -293,7 +293,8 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   }
 
   // Anchor the preview as a footer directly above the button hints.
-  GUI.drawStatusBar(renderer, 75, 8, 32, title, metrics.buttonHintsHeight, 0, false);
+  GUI.drawStatusBar(renderer, 75, 8, 32, title, metrics.buttonHintsHeight, 0, false, false, false,
+                    tr(STR_EXAMPLE_BOOK));
 
   renderer.drawCenteredText(UI_10_FONT_ID,
                             renderer.getScreenHeight() - UITheme::getInstance().getStatusBarHeight() -

@@ -360,7 +360,7 @@ void TxtReaderActivity::renderStatusBar() const {
   if (BoardConfig::isX4Pro() || SETTINGS.statusBarSpec().showsTitle()) {
     title = txt->getTitle();
   }
-  GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);
+  GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, "", 0, 0, true, false, false, title);
 }
 
 bool TxtReaderActivity::pageTurn(bool isForward) {

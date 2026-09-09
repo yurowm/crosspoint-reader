@@ -1,5 +1,6 @@
 #include "EpubReaderBookmarksActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
@@ -245,10 +246,15 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   const int contentWidth = pageWidth - hintGutterWidth;
   const int contentY = isPortraitInverted ? 50 : 0;
 
-  // Manual centering to honor content gutters.
-  const int titleX =
-      contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, tr(STR_BOOKMARKS), EpdFontFamily::BOLD)) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_BOOKMARKS), true, EpdFontFamily::BOLD);
+  if (BoardConfig::isX4Pro()) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    GUI.drawHeader(renderer, Rect{0, 0, pageWidth, metrics.headerHeight}, tr(STR_BOOKMARKS));
+  } else {
+    // Manual centering to honor content gutters.
+    const int titleX =
+        contentX + (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, tr(STR_BOOKMARKS), EpdFontFamily::BOLD)) / 2;
+    renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_BOOKMARKS), true, EpdFontFamily::BOLD);
+  }
 
   renderUi();
 

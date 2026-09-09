@@ -48,6 +48,48 @@ constexpr int bookmarkStatusIconGap = 4;
 constexpr int bookmarkStatusIconTopCrop = 2;
 int homeCoverWidth = 0;
 
+void drawX4ProTopBar(const GfxRenderer& renderer, const std::string& title) {
+  constexpr int horizontalPadding = 8;
+  constexpr int barHeight = UITheme::X4_PRO_TOP_PANEL_HEIGHT;
+  const int screenWidth = renderer.getScreenWidth();
+  const bool panelBlack = SETTINGS.screenInverted == 0;
+  const bool textBlack = !panelBlack;
+  renderer.fillRect(0, 0, screenWidth, barHeight, panelBlack);
+
+  const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int textY = UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET +
+                    (barHeight - UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET - lineHeight) / 2;
+  if (halClock.isAvailable()) {
+    char time[9];
+    const auto sb = SETTINGS.statusBarSpec();
+    if (halClock.formatTime(time, sizeof(time), sb.clockUtcOffsetQ, sb.clock12h)) {
+      renderer.drawText(SMALL_FONT_ID, horizontalPadding, textY, time, textBlack);
+    }
+  }
+
+  char batteryText[5];
+  snprintf(batteryText, sizeof(batteryText), "%u", static_cast<unsigned>(powerManager.getBatteryPercentage()));
+  const int batteryTextWidth = renderer.getTextWidth(SMALL_FONT_ID, batteryText);
+  constexpr int batteryHeight = 20;
+  const int batteryWidth = batteryTextWidth + 12;
+  const int batteryX = screenWidth - horizontalPadding - batteryWidth - 3;
+  const int batteryY = UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET +
+                       (barHeight - UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET - batteryHeight) / 2;
+  const bool batteryFillBlack = SETTINGS.screenInverted != 0;
+  renderer.fillRoundedRect(batteryX, batteryY, batteryWidth, batteryHeight, 3,
+                           batteryFillBlack ? Color::Black : Color::White);
+  renderer.fillRect(batteryX + batteryWidth, batteryY + 6, 3, 8, batteryFillBlack);
+  renderer.drawText(SMALL_FONT_ID, batteryX + (batteryWidth - batteryTextWidth) / 2, textY, batteryText,
+                    SETTINGS.screenInverted == 0);
+
+  if (!title.empty()) {
+    const int titleAreaWidth = screenWidth / 2;
+    const std::string clipped = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), titleAreaWidth);
+    const int titleWidth = renderer.getTextWidth(SMALL_FONT_ID, clipped.c_str());
+    renderer.drawText(SMALL_FONT_ID, (screenWidth - titleWidth) / 2, textY, clipped.c_str(), textBlack);
+  }
+}
+
 void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int y) {
   constexpr int bytesPerRow = bookmarkStatusIconWidth / 8;
   for (int row = 0; row < bookmarkStatusIconHeight; ++row) {
@@ -801,6 +843,11 @@ void BaseTheme::drawList(const GfxRenderer& renderer, const Rect rect, const int
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+  if (BoardConfig::isX4Pro()) {
+    drawX4ProTopBar(renderer, title ? title : "");
+    return;
+  }
+
   // Every activity header renders through the FreeInkUI header + battery
   // indicator components, styled by the active theme's tokens (padding,
   // centering, underline). Non-interactive frame: no hit rects registered.
@@ -1121,7 +1168,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
                               const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
-                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated) const {
+                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated,
+                              std::string topTitle) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -1132,45 +1180,18 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   if (BoardConfig::isX4Pro()) {
     const int screenWidth = renderer.getScreenWidth();
     const int screenHeight = renderer.getScreenHeight();
-    constexpr int topPanelHeight = UITheme::X4_PRO_TOP_PANEL_HEIGHT;
     constexpr int bottomPanelHeight = UITheme::X4_PRO_BOTTOM_PANEL_HEIGHT;
     constexpr int horizontalPadding = 8;
     const bool panelBlack = SETTINGS.screenInverted == 0;
     const bool panelTextBlack = !panelBlack;
-    const bool batteryFillBlack = SETTINGS.screenInverted != 0;
-    const Color batteryColor = batteryFillBlack ? Color::Black : Color::White;
-    const bool batteryTextBlack = SETTINGS.screenInverted == 0;
-    renderer.fillRect(0, 0, screenWidth, topPanelHeight, panelBlack);
+    drawX4ProTopBar(renderer, topTitle);
     renderer.fillRect(0, screenHeight - bottomPanelHeight, screenWidth, bottomPanelHeight, panelBlack);
 
     const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
-    const int topTextY = UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET +
-                         (topPanelHeight - UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET - lineHeight) / 2;
-    if (halClock.isAvailable()) {
-      char time[9];
-      if (halClock.formatTime(time, sizeof(time), sb.clockUtcOffsetQ, sb.clock12h)) {
-        renderer.drawText(SMALL_FONT_ID, horizontalPadding, topTextY, time, panelTextBlack);
-      }
-    }
-
-    char batteryText[5];
-    snprintf(batteryText, sizeof(batteryText), "%u", static_cast<unsigned>(powerManager.getBatteryPercentage()));
-    const int batteryTextWidth = renderer.getTextWidth(SMALL_FONT_ID, batteryText);
-    constexpr int batteryHeight = 20;
-    const int batteryWidth = batteryTextWidth + 12;
-    const int batteryX = screenWidth - horizontalPadding - batteryWidth - 3;
-    const int batteryY = UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET +
-                         (topPanelHeight - UITheme::X4_PRO_TOP_PANEL_CONTENT_OFFSET - batteryHeight) / 2;
-    renderer.fillRoundedRect(batteryX, batteryY, batteryWidth, batteryHeight, 3, batteryColor);
-    renderer.fillRect(batteryX + batteryWidth, batteryY + 6, 3, 8, batteryFillBlack);
-    renderer.drawText(SMALL_FONT_ID, batteryX + (batteryWidth - batteryTextWidth) / 2, topTextY, batteryText,
-                      batteryTextBlack);
-
     const int bottomTextY = screenHeight - bottomPanelHeight + (bottomPanelHeight - lineHeight) / 2;
     char progressText[8];
     snprintf(progressText, sizeof(progressText), "%.0f%%", bookProgress);
     renderer.drawText(SMALL_FONT_ID, horizontalPadding, bottomTextY, progressText, panelTextBlack);
-    const int leftWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText);
 
     char pageText[24];
     snprintf(pageText, sizeof(pageText), pageCountEstimated ? "~%d/%d" : "%d/%d", currentPage, pageCount);
@@ -1179,9 +1200,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
                       panelTextBlack);
 
     if (!title.empty()) {
-      const int sidePadding = 16;
-      const int symmetricMargin = std::max(leftWidth, rightWidth) + sidePadding;
-      const int available = std::max(0, screenWidth - horizontalPadding * 2 - symmetricMargin * 2);
+      const int available = screenWidth / 2;
       title = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), available);
       const int titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
       renderer.drawText(SMALL_FONT_ID, (screenWidth - titleWidth) / 2, bottomTextY, title.c_str(), panelTextBlack);

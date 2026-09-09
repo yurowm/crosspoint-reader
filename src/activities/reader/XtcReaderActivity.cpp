@@ -83,7 +83,9 @@ XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
   const auto sb = SETTINGS.statusBarSpec();
   const int bookPageCount = static_cast<int>(xtc->getPageCount());
   const int bookPage = static_cast<int>(currentPage) + 1;
-  std::string title = sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE ? xtc->getTitle() : "";
+  std::string title = !BoardConfig::isX4Pro() && sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE
+                          ? xtc->getTitle()
+                          : "";
 
   if (!xtc->hasChapters()) {
     return StatusBarInfo{bookPage, bookPageCount, std::move(title)};
@@ -148,7 +150,8 @@ void XtcReaderActivity::renderStatusBarOverlay(GfxRenderer& renderer, const Stat
   const int displayPage = static_cast<int>(currentPage) + 1;
   const float progress = pageCount > 0 ? (static_cast<float>(displayPage) * 100.0f) / pageCount : 0.0f;
   const auto pageInfo = getStatusBarInfo();
-  GUI.drawStatusBar(renderer, progress, pageInfo.currentPage, pageInfo.pageCount, pageInfo.title, paddingBottom);
+  GUI.drawStatusBar(renderer, progress, pageInfo.currentPage, pageInfo.pageCount, pageInfo.title, paddingBottom, 0,
+                    true, false, false, xtc->getTitle());
 }
 
 void XtcReaderActivity::renderPage() {

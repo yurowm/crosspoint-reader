@@ -65,6 +65,11 @@ const ThemeMetrics& UITheme::getMetrics() const {
     if (touch) {
       adjustedMetrics.buttonHintsHeight = 0;
     }
+    if (BoardConfig::isX4Pro()) {
+      adjustedMetrics.topPadding = 0;
+      adjustedMetrics.headerHeight = X4_PRO_TOP_PANEL_HEIGHT;
+      adjustedMetrics.homeTopPadding = X4_PRO_TOP_PANEL_HEIGHT;
+    }
     metricsForTouch = touch;
     metricsValid = true;
   }

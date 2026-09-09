@@ -471,7 +471,13 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (automaticPageTurnActive) {
+  if (BoardConfig::isX4Pro()) {
+    title = tr(STR_UNNAMED);
+    if (epub) {
+      const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+      if (tocIndex != -1) title = epub->getTocItem(tocIndex).title;
+    }
+  } else if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back) ||
         ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
@@ -1786,7 +1792,7 @@ void EpubReaderActivity::renderStatusBar() const {
     if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
       textYOffset += UITheme::getInstance().getMetrics().statusBarVerticalMargin;
     }
-  } else if (BoardConfig::isX4Pro() || sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
+  } else if (sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     title = tr(STR_UNNAMED);
     if (epub) {
       const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
@@ -1800,7 +1806,7 @@ void EpubReaderActivity::renderStatusBar() const {
   }
 
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked,
-                    section ? section->isBuilding() : false);
+                    section ? section->isBuilding() : false, epub ? epub->getTitle() : "");
 }
 
 // ---------------------------------------------------------------------------
