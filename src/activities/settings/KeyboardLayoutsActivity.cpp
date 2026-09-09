@@ -7,6 +7,8 @@
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "components/X4ProSettingsListStyle.h"
+#include "components/icons/listIcons.h"
 
 namespace fui = freeink::ui;
 
@@ -69,9 +71,14 @@ void KeyboardLayoutsActivity::buildScreen(UiScreen& screen) {
     const uint8_t row = static_cast<uint8_t>(i);
     if (isLocked(row)) {
       rowItems[i].value = tr(STR_DEFAULT_VALUE);
+      X4ProSettingsListStyle::clearToggle(rowItems[i]);
     } else {
       rowItems[i].value = (workingMask & keyboard_layouts::bitAt(row)) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      if (BoardConfig::isX4Pro()) {
+        X4ProSettingsListStyle::setToggle(rowItems[i], workingMask & keyboard_layouts::bitAt(row));
+      }
     }
+    rowItems[i].icon = fui::bitmapFromIcon(icon_settings_keyboard_24);
   }
 
   fui::ListProps props;
@@ -79,6 +86,7 @@ void KeyboardLayoutsActivity::buildScreen(UiScreen& screen) {
   props.count = keyboard_layouts::COUNT;
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+  X4ProSettingsListStyle::apply(screen, props);
   syncListViewport(screen, props);
   screen.list(props);
 }

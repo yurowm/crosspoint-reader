@@ -15,6 +15,7 @@
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "components/X4ProSettingsListStyle.h"
 #include "util/OpdsFilename.h"
 
 namespace fui = freeink::ui;
@@ -231,6 +232,7 @@ void OpdsServerListActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(rowItems_.size());
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+  X4ProSettingsListStyle::apply(screen, props);
   syncListViewport(screen, props, /*hasSubtitle=*/true);
   screen.list(props);
 }

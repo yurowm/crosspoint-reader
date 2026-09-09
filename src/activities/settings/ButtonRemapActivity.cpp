@@ -6,6 +6,8 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "components/X4ProSettingsListStyle.h"
+#include "components/icons/listIcons.h"
 
 namespace fui = freeink::ui;
 
@@ -162,6 +164,7 @@ void ButtonRemapActivity::buildScreen(UiScreen& screen) {
   for (uint8_t i = 0; i < kRoleCount; ++i) {
     const uint8_t assignedButton = tempMapping[i];
     rowItems[i].value = assignedButton == kUnassigned ? tr(STR_UNASSIGNED) : getHardwareName(assignedButton);
+    rowItems[i].icon = fui::bitmapFromIcon(icon_settings_buttons_24);
   }
 
   fui::ListProps props;
@@ -170,7 +173,9 @@ void ButtonRemapActivity::buildScreen(UiScreen& screen) {
   props.selectedIndex = currentStep;
   props.inputMask = fui::InputNone;
   props.scrollIndicator = false;
-  if (!mappedInput.hasTouch()) {
+  if (BoardConfig::isX4Pro()) {
+    X4ProSettingsListStyle::apply(screen, props);
+  } else if (!mappedInput.hasTouch()) {
     props.rowHeight = static_cast<int16_t>(metrics.listRowHeight);
   }
   // Label at the value's font size: both sides of the row read as one unit.

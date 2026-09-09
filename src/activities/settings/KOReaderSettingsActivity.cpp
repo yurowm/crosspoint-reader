@@ -11,6 +11,8 @@
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "components/X4ProSettingsListStyle.h"
+#include "components/icons/listIcons.h"
 
 namespace fui = freeink::ui;
 
@@ -154,6 +156,17 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
       rowValues_[i] = KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
     }
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    X4ProSettingsListStyle::clearToggle(rowItems_[i]);
+  }
+  rowItems_[0].icon = fui::bitmapFromIcon(icon_settings_keyboard_24);
+  rowItems_[1].icon = fui::bitmapFromIcon(icon_settings_keyboard_24);
+  rowItems_[2].icon = fui::bitmapFromIcon(icon_settings_server_24);
+  rowItems_[3].icon = fui::bitmapFromIcon(icon_settings_filter_24);
+  rowItems_[4].icon = fui::bitmapFromIcon(icon_settings_sync_24);
+  rowItems_[5].icon = fui::bitmapFromIcon(icon_settings_sync_24);
+  rowItems_[6].icon = fui::bitmapFromIcon(icon_settings_sync_24);
+  if (BoardConfig::isX4Pro()) {
+    X4ProSettingsListStyle::setToggle(rowItems_[4], KOREADER_STORE.getSendMetadata());
   }
 
   fui::ListProps props;
@@ -161,7 +174,7 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(MENU_ITEMS);
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  props.valueInset = 8;               // air between the value and the row edge
+  X4ProSettingsListStyle::apply(screen, props);
   // Label at the value's font size: both sides of the row read as one unit.
   // maxLines=2 also marks the style caller-owned (see textStyleUnset).
   props.labelText = screen.theme().smallText;

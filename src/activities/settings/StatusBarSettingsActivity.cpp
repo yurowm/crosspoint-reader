@@ -1,5 +1,6 @@
 #include "StatusBarSettingsActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <I18n.h>
@@ -12,6 +13,8 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "components/X4ProSettingsListStyle.h"
+#include "components/icons/listIcons.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
@@ -130,6 +133,17 @@ void StatusBarSettingsActivity::onEnter() {
     rowItems_[i].label = I18N.get(menuNames[i]);
     rowItems_[i].actionValue = static_cast<int16_t>(i);
   }
+  rowItems_[ITEM_CHAPTER_PAGE_COUNT].icon = fui::bitmapFromIcon(icon_settings_menu_24);
+  rowItems_[ITEM_BOOK_PROGRESS_PERCENTAGE].icon = fui::bitmapFromIcon(icon_settings_refresh_24);
+  rowItems_[ITEM_PROGRESS_BAR].icon = fui::bitmapFromIcon(icon_settings_status_bar_24);
+  rowItems_[ITEM_PROGRESS_BAR_THICKNESS].icon = fui::bitmapFromIcon(icon_settings_text_24);
+  rowItems_[ITEM_TITLE].icon = fui::bitmapFromIcon(icon_settings_text_24);
+  rowItems_[ITEM_BATTERY].icon = fui::bitmapFromIcon(icon_settings_battery_24);
+  rowItems_[ITEM_XTC_STATUS_BAR].icon = fui::bitmapFromIcon(icon_settings_status_bar_24);
+  rowItems_[ITEM_CLOCK].icon = fui::bitmapFromIcon(icon_settings_timeout_24);
+  rowItems_[ITEM_CLOCK_FORMAT].icon = fui::bitmapFromIcon(icon_settings_timeout_24);
+  rowItems_[ITEM_CLOCK_UTC_OFFSET].icon = fui::bitmapFromIcon(icon_settings_orientation_24);
+  rowItems_[ITEM_CLOCK_SYNC].icon = fui::bitmapFromIcon(icon_settings_sync_24);
 }
 
 bool StatusBarSettingsActivity::handleCustomInput() {
@@ -254,6 +268,13 @@ void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
   for (int i = 0; i < visibleItemCount; i++) {
     rowValues_[i] = rowValueText(i);
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    X4ProSettingsListStyle::clearToggle(rowItems_[i]);
+  }
+  if (BoardConfig::isX4Pro()) {
+    X4ProSettingsListStyle::setToggle(rowItems_[ITEM_CHAPTER_PAGE_COUNT], SETTINGS.statusBarChapterPageCount);
+    X4ProSettingsListStyle::setToggle(rowItems_[ITEM_BOOK_PROGRESS_PERCENTAGE],
+                                      SETTINGS.statusBarBookProgressPercentage);
+    X4ProSettingsListStyle::setToggle(rowItems_[ITEM_BATTERY], SETTINGS.statusBarBattery);
   }
 
   fui::ListProps props;
@@ -261,7 +282,7 @@ void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(visibleItemCount);
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  props.valueInset = 8;               // air between the value and the row edge
+  X4ProSettingsListStyle::apply(screen, props);
   props.labelText = screen.theme().smallText;
   props.labelText.maxLines = 2;  // also the explicitly-set marker, see SettingsActivity
   syncListViewport(screen, props);

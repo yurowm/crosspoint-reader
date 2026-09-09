@@ -9,6 +9,8 @@
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
+#include "components/X4ProSettingsListStyle.h"
+#include "components/icons/listIcons.h"
 
 namespace fui = freeink::ui;
 
@@ -178,14 +180,25 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   // buildMenuRowItems()); only rows with live values need refreshing here.
   for (size_t i = 0; i < menuItems.size(); i++) {
     const auto action = menuItems[i].action;
+    menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_menu_24);
+    X4ProSettingsListStyle::clearToggle(menuRowItems[i]);
     if (action == MenuAction::ROTATE_SCREEN) {
       menuRowItems[i].value = I18N.get(orientationLabels[pendingOrientation]);
+      menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_orientation_24);
     } else if (action == MenuAction::AUTO_PAGE_TURN) {
       menuRowItems[i].value = pageTurnLabels[selectedPageTurnOption];
     } else if (action == MenuAction::NIGHT_MODE) {
       menuRowItems[i].value = I18N.get(SETTINGS.screenInverted ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+      menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_night_24);
+      if (BoardConfig::isX4Pro()) X4ProSettingsListStyle::setToggle(menuRowItems[i], SETTINGS.screenInverted);
     } else if (action == MenuAction::FRONTLIGHT) {
       menuRowItems[i].value = I18N.get(Frontlight.isOn() ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+      menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_light_24);
+      if (BoardConfig::isX4Pro()) X4ProSettingsListStyle::setToggle(menuRowItems[i], Frontlight.isOn());
+    } else if (action == MenuAction::TEXT_SETTINGS) {
+      menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_text_24);
+    } else if (action == MenuAction::DICTIONARY) {
+      menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_dictionary_24);
     }
   }
 
@@ -194,11 +207,7 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(menuItems.size());
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  props.valueInset = 8;               // air between the value and the row edge
-  // Label at the value's font size: both sides of the row read as one unit.
-  // maxLines=2 also marks the style caller-owned (see textStyleUnset).
-  props.labelText = screen.theme().smallText;
-  props.labelText.maxLines = 2;
+  X4ProSettingsListStyle::apply(screen, props);
   syncListViewport(screen, props);
   screen.list(props);
 }

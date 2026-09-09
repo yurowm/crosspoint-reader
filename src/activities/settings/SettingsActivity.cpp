@@ -30,15 +30,13 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
+#include "components/X4ProSettingsListStyle.h"
 #include "components/icons/listIcons.h"
-#include "components/icons/toggleIcons.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
 
 namespace {
-constexpr int TOGGLE_DISPLAY_SIZE = 32;
-
 fui::BitmapRef settingsIcon(const StrId id) {
   switch (id) {
     case StrId::STR_SLEEP_SCREEN:
@@ -571,10 +569,9 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   for (size_t i = 0; i < settings.size(); i++) {
     rowValues_[i] = settingValueText(settings[i]);
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
-    if (usesToggleIcon(settings[i])) {
-      // Reserve the trailing icon slot; the renderer overlay below supplies
-      // the state-specific Lucide bitmap after FreeInkUI paints the row.
-      rowItems_[i].value = "      ";
+    X4ProSettingsListStyle::clearToggle(rowItems_[i]);
+    if (BoardConfig::isX4Pro() && usesToggleIcon(settings[i])) {
+      X4ProSettingsListStyle::setToggle(rowItems_[i], toggleIconChecked(settings[i]));
     }
   }
 
@@ -583,38 +580,9 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(rowItems_.size());
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  props.valueInset = 8;               // air between the value and the row edge
-  props.iconSize = 24;
-  if (BoardConfig::isX4Pro()) {
-    constexpr int TARGET_VISIBLE_ROWS = 10;
-    props.rowHeight = static_cast<int16_t>(screen.body().height / TARGET_VISIBLE_ROWS);
-    props.rowGap = 0;
-    compactListX_ = screen.body().x;
-    compactListY_ = screen.body().y;
-    compactListWidth_ = screen.body().width;
-    compactRowHeight_ = props.rowHeight;
-  }
-  // Titles match the value's font size (smallText) so both sides of a row
-  // read as one unit; labels that still don't fit wrap onto a second line.
-  // maxLines=2 also marks the style explicitly set (an all-default smallText
-  // fails textStyleUnset and the list would substitute bodyText back); the
-  // common fits-on-one-line case takes the renderer's fast path anyway.
-  props.labelText = screen.theme().smallText;
-  props.labelText.maxLines = 2;
+  X4ProSettingsListStyle::apply(screen, props);
   syncTabListViewport(screen, props);
   screen.list(props);
-  if (BoardConfig::isX4Pro() && compactRowHeight_ > 0) {
-    const int first = activeNav().top < 0 ? 0 : activeNav().top;
-    const int end = std::min(first + 10, settingsCount);
-    for (int index = first; index < end; index++) {
-      const fui::Rect row{compactListX_, static_cast<int16_t>(compactListY_ + (index - first) * compactRowHeight_),
-                          compactListWidth_, compactRowHeight_};
-      // Register exact compact-row bounds after the generic list targets.
-      // FreeInkUI resolves the newest matching target first, preventing the
-      // global 44 px touch minimum from making adjacent 10-row actions overlap.
-      screen.frame().hit(row, ACTION_ROW, static_cast<int16_t>(index), fui::InputTouch);
-    }
-  }
 }
 
 void SettingsActivity::render(RenderLock&&) {
@@ -633,22 +601,6 @@ void SettingsActivity::render(RenderLock&&) {
                  CROSSPOINT_VERSION);
 
   renderUi();
-
-  if (BoardConfig::isX4Pro() && compactRowHeight_ > 0 && currentSettings != nullptr) {
-    constexpr int VALUE_INSET = 8;
-    const int first = activeNav().top < 0 ? 0 : activeNav().top;
-    const int end = std::min(first + 10, settingsCount);
-    for (int index = first; index < end; index++) {
-      const auto& setting = (*currentSettings)[static_cast<size_t>(index)];
-      if (!usesToggleIcon(setting)) continue;
-      const auto& icon =
-          toggleIconChecked(setting) ? icon_settings_toggle_right_filled_32 : icon_settings_toggle_left_32;
-      const int x = compactListX_ + compactListWidth_ - VALUE_INSET - TOGGLE_DISPLAY_SIZE;
-      const int y = compactListY_ + (index - first) * compactRowHeight_ + (compactRowHeight_ - TOGGLE_DISPLAY_SIZE) / 2;
-      const bool selected = ringPos() - 1 == index;
-      renderer.drawNativeIcon(icon.bits, x, y, TOGGLE_DISPLAY_SIZE, !selected);
-    }
-  }
 
   const int ring = ringPos();
   const auto buttonHint = [ring](const MappedInputManager::NavigationAction action) {

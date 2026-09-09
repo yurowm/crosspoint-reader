@@ -8,6 +8,8 @@
 #include "OpdsServerStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "components/X4ProSettingsListStyle.h"
+#include "components/icons/listIcons.h"
 
 namespace fui = freeink::ui;
 
@@ -186,17 +188,17 @@ void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   fieldRowItems[1].value = editServer.url.empty() ? tr(STR_NOT_SET) : editServer.url.c_str();
   fieldRowItems[2].value = editServer.username.empty() ? tr(STR_NOT_SET) : editServer.username.c_str();
   fieldRowItems[3].value = editServer.password.empty() ? tr(STR_NOT_SET) : "******";
+  fieldRowItems[0].icon = fui::bitmapFromIcon(icon_settings_server_24);
+  fieldRowItems[1].icon = fui::bitmapFromIcon(icon_wifi_24);
+  fieldRowItems[2].icon = fui::bitmapFromIcon(icon_settings_keyboard_24);
+  fieldRowItems[3].icon = fui::bitmapFromIcon(icon_settings_keyboard_24);
 
   fui::ListProps props;
   props.items = fieldRowItems;
   props.count = static_cast<uint16_t>(getMenuItemCount());
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  props.valueInset = 8;               // air between the value and the row edge
-  // Label at the value's font size: both sides of the row read as one unit.
-  // maxLines=2 also marks the style caller-owned (see textStyleUnset).
-  props.labelText = screen.theme().smallText;
-  props.labelText.maxLines = 2;
+  X4ProSettingsListStyle::apply(screen, props);
   syncListViewport(screen, props);
   screen.list(props);
 }

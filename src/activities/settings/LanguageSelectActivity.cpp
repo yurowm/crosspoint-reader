@@ -10,6 +10,8 @@
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "components/X4ProSettingsListStyle.h"
+#include "components/icons/listIcons.h"
 
 namespace fui = freeink::ui;
 
@@ -78,10 +80,8 @@ void LanguageSelectActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(totalItems);
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  // Label at the value's font size: both sides of the row read as one unit.
-  // maxLines=2 also marks the style caller-owned (see textStyleUnset).
-  props.labelText = screen.theme().smallText;
-  props.labelText.maxLines = 2;
+  for (int i = 0; i < totalItems; ++i) rowItems[i].icon = fui::bitmapFromIcon(icon_settings_language_24);
+  X4ProSettingsListStyle::apply(screen, props);
   syncListViewport(screen, props);
   screen.list(props);
 }

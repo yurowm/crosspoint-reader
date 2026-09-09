@@ -16,6 +16,8 @@
 #include "SdCardFontSystem.h"
 #include "TextSettingsPreview.h"
 #include "components/UITheme.h"
+#include "components/X4ProSettingsListStyle.h"
+#include "components/icons/listIcons.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
@@ -104,15 +106,20 @@ void TextSettingsActivity::rebuildRowItems() {
     switch (tab_) {
       case Tab::Family:
         item.label = fonts_[i].name.c_str();
+        item.icon = fui::bitmapFromIcon(icon_settings_fonts_24);
         break;
       case Tab::Size:
         item.label = sizes_[i].name.c_str();
+        item.icon = fui::bitmapFromIcon(icon_settings_text_24);
         break;
       case Tab::Layout:
         item.label = I18N.get(LAYOUT_ROW_NAME_IDS[i]);
+        item.icon = fui::bitmapFromIcon(i == static_cast<int>(LayoutRow::Alignment) ? icon_settings_menu_24
+                                                                                    : icon_settings_text_24);
         break;
       case Tab::Style:
         item.label = I18N.get(STYLE_ROW_NAME_IDS[i]);
+        item.icon = fui::bitmapFromIcon(icon_settings_theme_24);
         break;
       default:
         break;
@@ -225,6 +232,16 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
         break;
     }
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    X4ProSettingsListStyle::clearToggle(rowItems_[i]);
+    if (BoardConfig::isX4Pro()) {
+      if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::ParaSpacing)) {
+        X4ProSettingsListStyle::setToggle(rowItems_[i], SETTINGS.extraParagraphSpacing);
+      } else if (tab_ == Tab::Style) {
+        const bool checked[] = {SETTINGS.focusReadingEnabled != 0, SETTINGS.hyphenationEnabled != 0,
+                                SETTINGS.embeddedStyle != 0, SETTINGS.textAntiAliasing != 0};
+        X4ProSettingsListStyle::setToggle(rowItems_[i], checked[i]);
+      }
+    }
   }
 
   fui::ListProps props;
@@ -232,7 +249,7 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(rowItems_.size());
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  props.valueInset = 8;               // air between the value and the row edge
+  X4ProSettingsListStyle::apply(screen, props);
   // Titles match the value's font size (smallText) so both sides of a row
   // read as one unit; labels that still don't fit wrap onto a second line.
   // maxLines=2 also marks the style explicitly set (see SettingsActivity).
