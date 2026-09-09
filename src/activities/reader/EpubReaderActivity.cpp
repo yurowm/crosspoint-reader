@@ -471,13 +471,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (BoardConfig::isX4Pro()) {
-    title = tr(STR_UNNAMED);
-    if (epub) {
-      const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-      if (tocIndex != -1) title = epub->getTocItem(tocIndex).title;
-    }
-  } else if (automaticPageTurnActive) {
+  if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back) ||
         ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
@@ -1786,7 +1780,13 @@ void EpubReaderActivity::renderStatusBar() const {
   int textYOffset = 0;
   const auto sb = SETTINGS.statusBarSpec();
 
-  if (automaticPageTurnActive) {
+  if (BoardConfig::isX4Pro()) {
+    title = tr(STR_UNNAMED);
+    if (epub) {
+      const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+      if (tocIndex != -1) title = epub->getTocItem(tocIndex).title;
+    }
+  } else if (automaticPageTurnActive) {
     title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(60 * 1000 / pageTurnDuration);
     const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
     if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
