@@ -82,7 +82,7 @@ void OpdsParser::clear() {
   prevPageUrl.clear();
   currentEntry = OpdsEntry{};
   currentText.clear();
-  inEntry = inTitle = inAuthor = inAuthorName = inId = false;
+  inEntry = inTitle = inAuthor = inAuthorName = inId = inUpdated = false;
   collectCurrentEntry = false;
   feedTruncated = false;
 }
@@ -125,7 +125,7 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
     self->feedTruncated = self->feedTruncated || !self->collectCurrentEntry;
     self->currentEntry = OpdsEntry{};
     self->currentText.clear();
-    self->inTitle = self->inAuthor = self->inAuthorName = self->inId = false;
+    self->inTitle = self->inAuthor = self->inAuthorName = self->inId = self->inUpdated = false;
     return;
   }
 
@@ -181,6 +181,9 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
   } else if (strcmp(name, "id") == 0 || strstr(name, ":id") != nullptr) {
     self->inId = true;
     self->currentText.clear();
+  } else if (strcmp(name, "updated") == 0 || strstr(name, ":updated") != nullptr) {
+    self->inUpdated = true;
+    self->currentText.clear();
   }
 }
 
@@ -205,6 +208,9 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
     } else if (strcmp(name, "id") == 0 || strstr(name, ":id") != nullptr) {
       if (self->inId) self->currentEntry.id = self->currentText;
       self->inId = false;
+    } else if (strcmp(name, "updated") == 0 || strstr(name, ":updated") != nullptr) {
+      if (self->inUpdated) self->currentEntry.updated = self->currentText;
+      self->inUpdated = false;
     }
   }
 }
@@ -217,6 +223,8 @@ void XMLCALL OpdsParser::characterData(void* userData, const XML_Char* s, const 
   } else if (self->inAuthorName) {
     appendBounded(self->currentText, s, len, MAX_AUTHOR_CHARS);
   } else if (self->inId) {
+    appendBounded(self->currentText, s, len, MAX_ID_CHARS);
+  } else if (self->inUpdated) {
     appendBounded(self->currentText, s, len, MAX_ID_CHARS);
   }
 }

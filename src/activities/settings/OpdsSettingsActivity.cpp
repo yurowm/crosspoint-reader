@@ -6,6 +6,7 @@
 
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "activities/browser/CalibreSyncActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "components/X4ProSettingsListStyle.h"
@@ -15,8 +16,10 @@ namespace fui = freeink::ui;
 
 namespace {
 // Editable fields: Name, URL, Username, Password.
-// Existing servers also show a Delete option (BASE_ITEMS + 1).
+// Existing servers also show full sync and Delete actions.
 constexpr int BASE_ITEMS = 4;
+constexpr int SYNC_ITEM = BASE_ITEMS;
+constexpr int DELETE_ITEM = BASE_ITEMS + 1;
 }  // namespace
 
 OpdsSettingsActivity::OpdsSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -30,14 +33,15 @@ OpdsSettingsActivity::OpdsSettingsActivity(GfxRenderer& renderer, MappedInputMan
     fieldRowItems[i].label = I18N.get(fieldNames[i]);
     fieldRowItems[i].actionValue = static_cast<int16_t>(i);
   }
-  fieldRowItems[BASE_ITEMS].label = tr(STR_DELETE_SERVER);
-  fieldRowItems[BASE_ITEMS].icon = fui::bitmapFromIcon(icon_settings_delete_24);
-  fieldRowItems[BASE_ITEMS].actionValue = static_cast<int16_t>(BASE_ITEMS);
+  fieldRowItems[SYNC_ITEM].label = tr(STR_CALIBRE_SYNC);
+  fieldRowItems[SYNC_ITEM].icon = fui::bitmapFromIcon(icon_settings_sync_24);
+  fieldRowItems[SYNC_ITEM].actionValue = static_cast<int16_t>(SYNC_ITEM);
+  fieldRowItems[DELETE_ITEM].label = tr(STR_DELETE_SERVER);
+  fieldRowItems[DELETE_ITEM].icon = fui::bitmapFromIcon(icon_settings_delete_24);
+  fieldRowItems[DELETE_ITEM].actionValue = static_cast<int16_t>(DELETE_ITEM);
 }
 
-int OpdsSettingsActivity::getMenuItemCount() const {
-  return isNewServer ? BASE_ITEMS : BASE_ITEMS + 1;  // +1 for Delete
-}
+int OpdsSettingsActivity::getMenuItemCount() const { return isNewServer ? BASE_ITEMS : BASE_ITEMS + 2; }
 
 void OpdsSettingsActivity::onEnter() {
   UiListActivity::onEnter();
@@ -153,7 +157,9 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
                                                                    editServer.password, 63, InputType::Text),
                            handler);
-  } else if (nav.selected == 4 && !isNewServer) {
+  } else if (nav.selected == SYNC_ITEM && !isNewServer) {
+    startActivityForResult(std::make_unique<CalibreSyncActivity>(renderer, mappedInput, editServer), nullptr);
+  } else if (nav.selected == DELETE_ITEM && !isNewServer) {
     // Delete flow is only available for existing servers.
     if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
       LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);

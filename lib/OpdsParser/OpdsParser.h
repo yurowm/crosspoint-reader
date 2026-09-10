@@ -22,6 +22,7 @@ struct OpdsEntry {
   std::string author;  // Only for books
   std::string href;    // Navigation URL or epub download URL
   std::string id;
+  std::string updated;  // Atom timestamp used to detect changed books
 };
 
 // Legacy alias for backward compatibility
@@ -108,6 +109,7 @@ class OpdsParser final : public Print {
   bool inAuthor = false;
   bool inAuthorName = false;
   bool inId = false;
+  bool inUpdated = false;
   bool collectCurrentEntry = false;
 
   bool errorOccured = false;
