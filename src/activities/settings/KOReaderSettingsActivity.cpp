@@ -158,13 +158,14 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
     X4ProSettingsListStyle::clearToggle(rowItems_[i]);
   }
-  rowItems_[0].icon = fui::bitmapFromIcon(icon_settings_keyboard_24);
-  rowItems_[1].icon = fui::bitmapFromIcon(icon_settings_keyboard_24);
+  rowItems_[0].icon = fui::bitmapFromIcon(icon_settings_user_24);
+  rowItems_[1].icon = fui::bitmapFromIcon(icon_settings_password_24);
   rowItems_[2].icon = fui::bitmapFromIcon(icon_settings_server_24);
-  rowItems_[3].icon = fui::bitmapFromIcon(icon_settings_filter_24);
-  rowItems_[4].icon = fui::bitmapFromIcon(icon_settings_sync_24);
+  rowItems_[3].icon = fui::bitmapFromIcon(icon_settings_document_24);
+  rowItems_[4].icon = fui::bitmapFromIcon(icon_settings_filename_24);
   rowItems_[5].icon = fui::bitmapFromIcon(icon_settings_sync_24);
-  rowItems_[6].icon = fui::bitmapFromIcon(icon_settings_sync_24);
+  rowItems_[6].icon = fui::bitmapFromIcon(icon_settings_sign_up_24);
+  rowItems_[7].icon = fui::bitmapFromIcon(icon_settings_authenticate_24);
   if (BoardConfig::isX4Pro()) {
     X4ProSettingsListStyle::setToggle(rowItems_[4], KOREADER_STORE.getSendMetadata());
   }

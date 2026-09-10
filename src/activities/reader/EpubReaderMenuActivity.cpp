@@ -14,6 +14,51 @@
 
 namespace fui = freeink::ui;
 
+namespace {
+fui::BitmapRef menuIcon(const EpubReaderMenuActivity::MenuAction action) {
+  using Action = EpubReaderMenuActivity::MenuAction;
+  switch (action) {
+    case Action::SELECT_CHAPTER:
+      return fui::bitmapFromIcon(icon_reader_chapters_24);
+    case Action::FOOTNOTES:
+      return fui::bitmapFromIcon(icon_reader_footnotes_24);
+    case Action::BOOKMARKS:
+      return fui::bitmapFromIcon(icon_bookmark_24);
+    case Action::TOGGLE_BOOKMARK:
+      return fui::bitmapFromIcon(icon_reader_toggle_bookmark_24);
+    case Action::TEXT_SETTINGS:
+      return fui::bitmapFromIcon(icon_settings_text_24);
+    case Action::NIGHT_MODE:
+      return fui::bitmapFromIcon(icon_settings_night_24);
+    case Action::FRONTLIGHT:
+      return fui::bitmapFromIcon(icon_settings_light_24);
+    case Action::DICTIONARY:
+      return fui::bitmapFromIcon(icon_settings_dictionary_24);
+    case Action::ROTATE_SCREEN:
+      return fui::bitmapFromIcon(icon_settings_orientation_24);
+    case Action::AUTO_PAGE_TURN:
+      return fui::bitmapFromIcon(icon_settings_timeout_24);
+    case Action::GO_TO_PERCENT:
+      return fui::bitmapFromIcon(icon_reader_progress_24);
+    case Action::STATISTICS:
+      return fui::bitmapFromIcon(icon_reader_statistics_24);
+    case Action::ILLUSTRATIONS:
+      return fui::bitmapFromIcon(icon_reader_illustrations_24);
+    case Action::SCREENSHOT:
+      return fui::bitmapFromIcon(icon_reader_screenshot_24);
+    case Action::DISPLAY_QR:
+      return fui::bitmapFromIcon(icon_reader_qr_24);
+    case Action::GO_HOME:
+      return fui::bitmapFromIcon(icon_reader_home_24);
+    case Action::SYNC:
+      return fui::bitmapFromIcon(icon_settings_sync_24);
+    case Action::DELETE_CACHE:
+      return fui::bitmapFromIcon(icon_reader_delete_24);
+  }
+  return {};
+}
+}  // namespace
+
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
@@ -180,25 +225,18 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   // buildMenuRowItems()); only rows with live values need refreshing here.
   for (size_t i = 0; i < menuItems.size(); i++) {
     const auto action = menuItems[i].action;
-    menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_menu_24);
+    menuRowItems[i].icon = menuIcon(action);
     X4ProSettingsListStyle::clearToggle(menuRowItems[i]);
     if (action == MenuAction::ROTATE_SCREEN) {
       menuRowItems[i].value = I18N.get(orientationLabels[pendingOrientation]);
-      menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_orientation_24);
     } else if (action == MenuAction::AUTO_PAGE_TURN) {
       menuRowItems[i].value = pageTurnLabels[selectedPageTurnOption];
     } else if (action == MenuAction::NIGHT_MODE) {
       menuRowItems[i].value = I18N.get(SETTINGS.screenInverted ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
-      menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_night_24);
       if (BoardConfig::isX4Pro()) X4ProSettingsListStyle::setToggle(menuRowItems[i], SETTINGS.screenInverted);
     } else if (action == MenuAction::FRONTLIGHT) {
       menuRowItems[i].value = I18N.get(Frontlight.isOn() ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
-      menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_light_24);
       if (BoardConfig::isX4Pro()) X4ProSettingsListStyle::setToggle(menuRowItems[i], Frontlight.isOn());
-    } else if (action == MenuAction::TEXT_SETTINGS) {
-      menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_text_24);
-    } else if (action == MenuAction::DICTIONARY) {
-      menuRowItems[i].icon = fui::bitmapFromIcon(icon_settings_dictionary_24);
     }
   }
 

@@ -11,6 +11,7 @@
 class EpubIllustrationsActivity final : public Activity {
  public:
   EpubIllustrationsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::shared_ptr<Epub> epub);
+  EpubIllustrationsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& bookPath);
 
   void onEnter() override;
   void onExit() override;
@@ -18,7 +19,10 @@ class EpubIllustrationsActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  std::shared_ptr<Epub> epub;
+  std::shared_ptr<Epub> sharedEpub;
+  std::unique_ptr<Epub> ownedEpub;
+  Epub* epub = nullptr;
+  std::string bookPath;
   std::vector<std::string> illustrations;
   std::string extractedPath;
   std::string convertedPath;

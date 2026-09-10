@@ -367,8 +367,9 @@ void HomeActivity::loop() {
   const int recentCount = recentBooks.empty() ? 0 : 1;
   const int coverColumnWidth = renderer.getScreenWidth();
   int touchedBook = -1;
-  const auto coverTouch = mappedInput.colTouch(touchedBook, 0, coverColumnWidth, recentCount, metrics.homeTopPadding,
-                                               metrics.homeTopPadding + metrics.homeCoverTileHeight, coverColumnWidth);
+  const int coverTop = metrics.homeTopPadding + metrics.homeCoverTopGap;
+  const auto coverTouch = mappedInput.colTouch(touchedBook, 0, coverColumnWidth, recentCount, coverTop,
+                                               coverTop + metrics.homeCoverTileHeight, coverColumnWidth);
   if (coverTouch != MappedInputManager::RowTouch::None) {
     if (coverTouch == MappedInputManager::RowTouch::Down) {
       if (selectorIndex != 0) {
@@ -426,12 +427,13 @@ void HomeActivity::render(RenderLock&&) {
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
   // instead of the 48 KB full framebuffer the previous bind captured.
   coverRectX = 0;
-  coverRectY = metrics.homeTopPadding;
+  const int coverTop = metrics.homeTopPadding + metrics.homeCoverTopGap;
+  coverRectY = coverTop;
   coverRectW = pageWidth;
   coverRectH = metrics.homeCoverTileHeight;
 
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                          recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
+  GUI.drawRecentBookCover(renderer, Rect{0, coverTop, pageWidth, metrics.homeCoverTileHeight}, recentBooks,
+                          selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
@@ -451,9 +453,9 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawButtonMenu(
       renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
-                         metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
+      Rect{0, coverTop + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
+           pageHeight - (metrics.headerHeight + coverTop + metrics.verticalSpacing + metrics.homeMenuTopOffset +
+                         metrics.buttonHintsHeight)},
       static_cast<int>(menuItems.size()), selectorIndex,
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });

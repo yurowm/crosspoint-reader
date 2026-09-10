@@ -67,6 +67,7 @@ struct ThemeMetrics {
   int scrollBarRightOffset;
 
   int homeTopPadding;
+  int homeCoverTopGap;
   int homeCoverHeight;
   int homeCoverTileHeight;
   int homeRecentBooksCount;
@@ -210,6 +211,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .scrollBarWidth = 4,
                                  .scrollBarRightOffset = 5,
                                  .homeTopPadding = 40,
+                                 .homeCoverTopGap = 0,
                                  .homeCoverHeight = 400,
                                  .homeCoverTileHeight = 400,
                                  .homeRecentBooksCount = 1,

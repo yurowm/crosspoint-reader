@@ -69,6 +69,7 @@ const ThemeMetrics& UITheme::getMetrics() const {
       adjustedMetrics.topPadding = 0;
       adjustedMetrics.headerHeight = X4_PRO_TOP_PANEL_HEIGHT;
       adjustedMetrics.homeTopPadding = X4_PRO_TOP_PANEL_HEIGHT;
+      adjustedMetrics.homeCoverTopGap = 4;
     }
     metricsForTouch = touch;
     metricsValid = true;

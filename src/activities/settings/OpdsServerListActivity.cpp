@@ -16,6 +16,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "components/X4ProSettingsListStyle.h"
+#include "components/icons/listIcons.h"
 #include "util/OpdsFilename.h"
 
 namespace fui = freeink::ui;
@@ -83,22 +84,26 @@ void OpdsServerListActivity::rebuildRowItems() {
     fui::ListItem item;
     item.label = servers[i].name.empty() ? servers[i].url.c_str() : servers[i].name.c_str();
     if (!servers[i].name.empty()) item.subtitle = servers[i].url.c_str();
+    item.icon = fui::bitmapFromIcon(icon_settings_server_24);
     item.actionValue = static_cast<int16_t>(i);
     rowItems_.push_back(item);
   }
   fui::ListItem addServer;
   addServer.label = tr(STR_ADD_SERVER);
+  addServer.icon = fui::bitmapFromIcon(icon_list_add_24);
   addServer.actionValue = static_cast<int16_t>(serverCount);
   rowItems_.push_back(addServer);
 
   if (!pickerMode) {
     fui::ListItem folder;
     folder.label = tr(STR_OPDS_DOWNLOAD_FOLDER);
+    folder.icon = fui::bitmapFromIcon(icon_settings_folder_24);
     folder.actionValue = static_cast<int16_t>(serverCount + 1);
     rowItems_.push_back(folder);  // subtitle refreshed per render below
 
     fui::ListItem format;
     format.label = tr(STR_OPDS_FILENAME_FORMAT);
+    format.icon = fui::bitmapFromIcon(icon_settings_filename_24);
     format.actionValue = static_cast<int16_t>(serverCount + 2);
     rowItems_.push_back(format);  // subtitle refreshed per render below
   }

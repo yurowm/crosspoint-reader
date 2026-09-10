@@ -164,7 +164,20 @@ void ButtonRemapActivity::buildScreen(UiScreen& screen) {
   for (uint8_t i = 0; i < kRoleCount; ++i) {
     const uint8_t assignedButton = tempMapping[i];
     rowItems[i].value = assignedButton == kUnassigned ? tr(STR_UNASSIGNED) : getHardwareName(assignedButton);
-    rowItems[i].icon = fui::bitmapFromIcon(icon_settings_buttons_24);
+    switch (i) {
+      case 0:
+        rowItems[i].icon = fui::bitmapFromIcon(icon_settings_back_24);
+        break;
+      case 1:
+        rowItems[i].icon = fui::bitmapFromIcon(icon_settings_confirm_24);
+        break;
+      case 2:
+        rowItems[i].icon = fui::bitmapFromIcon(icon_settings_left_24);
+        break;
+      default:
+        rowItems[i].icon = fui::bitmapFromIcon(icon_settings_right_24);
+        break;
+    }
   }
 
   fui::ListProps props;

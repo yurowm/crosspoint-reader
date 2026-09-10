@@ -9,6 +9,7 @@
 #include <Utf8.h>
 #include <ZipFile.h>
 
+#include <algorithm>
 #include <limits>
 
 #include "Epub/parsers/ContainerParser.h"
@@ -951,6 +952,7 @@ bool Epub::listIllustrations(std::vector<std::string>& paths) const {
 
   const std::string coverPath =
       bookMetadataCache ? FsHelpers::normalisePath(bookMetadataCache->coreMetadata.coverItemHref) : std::string{};
+  if (!coverPath.empty()) paths.push_back(coverPath);
   const bool enumerated = ZipFile(filepath).enumerateFilePaths([&](const std::string_view path) {
     if (!FsHelpers::hasJpgExtension(path) && !FsHelpers::hasPngExtension(path)) return;
     const std::string normalized = FsHelpers::normalisePath(std::string{path});
@@ -962,7 +964,10 @@ bool Epub::listIllustrations(std::vector<std::string>& paths) const {
     return false;
   }
 
-  FsHelpers::sortFileList(paths);
+  const size_t firstSortable = coverPath.empty() ? 0 : 1;
+  if (paths.size() > firstSortable + 1) {
+    std::sort(paths.begin() + firstSortable, paths.end(), FsHelpers::naturalLess);
+  }
   return true;
 }
 

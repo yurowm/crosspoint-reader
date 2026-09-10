@@ -39,6 +39,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .scrollBarWidth = 4,
                                  .scrollBarRightOffset = 5,
                                  .homeTopPadding = 55,
+                                 .homeCoverTopGap = 0,
                                  // Smaller cover tile so the home menu sits higher (fits 5 items without overlap).
                                  .homeCoverHeight = 300,
                                  .homeCoverTileHeight = 350,

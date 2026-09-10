@@ -1,5 +1,6 @@
 #include "WifiSelectionActivity.h"
 
+#include <FreeInkUIIcon.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <I18n.h>
@@ -14,6 +15,7 @@
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "components/icons/listIcons.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
@@ -297,6 +299,7 @@ void WifiSelectionActivity::rebuildNetworkRowItems() {
     }
     fui::ListItem item;
     item.label = network.isHiddenPlaceholder ? tr(STR_ADD_HIDDEN_NETWORK) : network.ssid.c_str();
+    item.icon = freeink::ui::bitmapFromIcon(network.isHiddenPlaceholder ? icon_list_add_24 : icon_wifi_24);
     if (!networkStatuses[i].empty()) item.value = networkStatuses[i].c_str();
     item.actionValue = static_cast<int16_t>(i);
     networkRowItems.push_back(item);

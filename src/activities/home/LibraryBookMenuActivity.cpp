@@ -1,5 +1,6 @@
 #include "LibraryBookMenuActivity.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -11,6 +12,7 @@
 #include "LibraryBookStateStore.h"
 #include "MappedInputManager.h"
 #include "ReadingStats.h"
+#include "activities/reader/EpubIllustrationsActivity.h"
 #include "activities/reader/ReadingStatsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -105,6 +107,16 @@ void LibraryBookMenuActivity::activateSelection() {
       return;
     }
     startActivityForResult(std::move(stats), nullptr);
+    return;
+  }
+
+  if (FsHelpers::hasEpubExtension(book.path)) {
+    auto illustrations = makeUniqueNoThrow<EpubIllustrationsActivity>(renderer, mappedInput, book.path);
+    if (!illustrations) {
+      LOG_ERR("LBM", "OOM: EpubIllustrationsActivity");
+      return;
+    }
+    startActivityForResult(std::move(illustrations), nullptr);
     return;
   }
 
@@ -214,7 +226,7 @@ void LibraryBookMenuActivity::render(RenderLock&&) {
                                                                          : tr(STR_MARK_AS_READ));
         }
         if (index == 3) return std::string(tr(STR_BOOK_STATS));
-        return std::string(tr(STR_VIEW_BOOK_COVER));
+        return std::string(FsHelpers::hasEpubExtension(book.path) ? tr(STR_ILLUSTRATIONS) : tr(STR_VIEW_BOOK_COVER));
       },
       [this](const int index) {
         if (index == 0) return ReadBook;

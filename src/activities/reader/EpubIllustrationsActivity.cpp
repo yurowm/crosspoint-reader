@@ -8,6 +8,7 @@
 #include <I18n.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <PngToBmpConverter.h>
 
 #include <algorithm>
@@ -17,10 +18,22 @@
 
 EpubIllustrationsActivity::EpubIllustrationsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                      std::shared_ptr<Epub> epub)
-    : Activity("EpubIllustrations", renderer, mappedInput), epub(std::move(epub)) {}
+    : Activity("EpubIllustrations", renderer, mappedInput), sharedEpub(std::move(epub)), epub(sharedEpub.get()) {}
+
+EpubIllustrationsActivity::EpubIllustrationsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                     const std::string& bookPath)
+    : Activity("EpubIllustrations", renderer, mappedInput), bookPath(bookPath) {}
 
 void EpubIllustrationsActivity::onEnter() {
   Activity::onEnter();
+  if (!epub && !bookPath.empty()) {
+    ownedEpub = makeUniqueNoThrow<Epub>(bookPath, "/.crosspoint");
+    if (!ownedEpub || !ownedEpub->loadMetadata()) {
+      LOG_ERR("ILL", "Failed to load EPUB metadata");
+      ownedEpub.reset();
+    }
+    epub = ownedEpub.get();
+  }
   illustrations.clear();
   currentIndex = 0;
   if (!epub || !epub->listIllustrations(illustrations)) {
@@ -43,7 +56,9 @@ void EpubIllustrationsActivity::clearExtracted() {
 void EpubIllustrationsActivity::onExit() {
   clearExtracted();
   illustrations.clear();
-  epub.reset();
+  epub = nullptr;
+  sharedEpub.reset();
+  ownedEpub.reset();
   Activity::onExit();
 }
 

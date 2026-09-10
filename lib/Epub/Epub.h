@@ -73,7 +73,7 @@ class Epub {
   bool extractItemToFile(const std::string& itemHref, const std::string& destPath) const;
   bool getItemSize(const std::string& itemHref, size_t* size) const;
   // Lists viewable JPEG/PNG assets in the book without parsing or paginating
-  // every spine document. The cover is omitted from the result.
+  // every spine document. The cover is first when one is declared.
   bool listIllustrations(std::vector<std::string>& paths) const;
   // Streams every spine XHTML document through a text-only parser. The parser
   // retains only a 32-bit Unicode-codepoint count, never the book text.

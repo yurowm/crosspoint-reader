@@ -31,6 +31,7 @@ OpdsSettingsActivity::OpdsSettingsActivity(GfxRenderer& renderer, MappedInputMan
     fieldRowItems[i].actionValue = static_cast<int16_t>(i);
   }
   fieldRowItems[BASE_ITEMS].label = tr(STR_DELETE_SERVER);
+  fieldRowItems[BASE_ITEMS].icon = fui::bitmapFromIcon(icon_settings_delete_24);
   fieldRowItems[BASE_ITEMS].actionValue = static_cast<int16_t>(BASE_ITEMS);
 }
 
@@ -188,10 +189,10 @@ void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   fieldRowItems[1].value = editServer.url.empty() ? tr(STR_NOT_SET) : editServer.url.c_str();
   fieldRowItems[2].value = editServer.username.empty() ? tr(STR_NOT_SET) : editServer.username.c_str();
   fieldRowItems[3].value = editServer.password.empty() ? tr(STR_NOT_SET) : "******";
-  fieldRowItems[0].icon = fui::bitmapFromIcon(icon_settings_server_24);
-  fieldRowItems[1].icon = fui::bitmapFromIcon(icon_wifi_24);
-  fieldRowItems[2].icon = fui::bitmapFromIcon(icon_settings_keyboard_24);
-  fieldRowItems[3].icon = fui::bitmapFromIcon(icon_settings_keyboard_24);
+  fieldRowItems[0].icon = fui::bitmapFromIcon(icon_settings_name_24);
+  fieldRowItems[1].icon = fui::bitmapFromIcon(icon_settings_link_24);
+  fieldRowItems[2].icon = fui::bitmapFromIcon(icon_settings_user_24);
+  fieldRowItems[3].icon = fui::bitmapFromIcon(icon_settings_password_24);
 
   fui::ListProps props;
   props.items = fieldRowItems;

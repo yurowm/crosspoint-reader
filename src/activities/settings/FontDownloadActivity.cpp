@@ -17,6 +17,8 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
+#include "components/X4ProSettingsListStyle.h"
+#include "components/icons/listIcons.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 
@@ -648,7 +650,7 @@ void FontDownloadActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(rowItems_.size());
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  props.valueInset = 8;               // air between the status and the row edge
+  X4ProSettingsListStyle::apply(screen, props);
   syncListViewport(screen, props, /*hasSubtitle=*/state_ == FAMILY_LIST);
   screen.list(props);
 }
@@ -680,6 +682,7 @@ void FontDownloadActivity::rebuildGroupRowItems() {
   for (int rowIndex = 0; rowIndex < listSize; rowIndex++) {
     fui::ListItem item;
     item.label = rowIndex == 0 ? tr(STR_ALL_FONTS) : scriptGroupLabels_[rowIndex - 1].c_str();
+    item.icon = fui::bitmapFromIcon(rowIndex == 0 ? icon_settings_fonts_24 : icon_settings_language_24);
     const int memberCount = rowIndex == 0 ? static_cast<int>(families_.size()) : groupMemberCount(rowIndex - 1);
     rowLabels_[rowIndex] = std::to_string(memberCount);
     item.value = rowLabels_[rowIndex].c_str();
@@ -698,12 +701,15 @@ void FontDownloadActivity::rebuildFamilyRowItems() {
     if (isDownloadAllRow(i)) {
       rowLabels_[i] = std::string(tr(STR_DOWNLOAD_ALL)) + " (" + formatSize(totalDownloadSize()) + ")";
       item.label = rowLabels_[i].c_str();
+      item.icon = fui::bitmapFromIcon(icon_download_24);
     } else if (isUpdateAllRow(i)) {
       rowLabels_[i] = std::string(tr(STR_UPDATE_ALL)) + " (" + formatSize(totalUpdateSize()) + ")";
       item.label = rowLabels_[i].c_str();
+      item.icon = fui::bitmapFromIcon(icon_settings_update_24);
     } else {
       const auto& family = families_[familyIndexFromList(i)];
       item.label = family.name.c_str();
+      item.icon = fui::bitmapFromIcon(icon_settings_text_24);
       if (!family.description.empty()) item.subtitle = family.description.c_str();
       if (family.hasUpdate) {
         item.value = tr(STR_UPDATE_AVAILABLE);
