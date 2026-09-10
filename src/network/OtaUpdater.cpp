@@ -19,7 +19,11 @@
 #include "FirmwareFlasher.h"
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/yurowm/crosspoint-reader/releases/latest";
+constexpr char primaryReleaseUrl[] = "https://server.yurowm.in/crosspoint-reader/latest.json";
+// Transitional fallback for devices moving from GitHub-hosted OTA releases to
+// the self-hosted release feed. Remove after the installed base has upgraded.
+constexpr char fallbackReleaseUrl[] = "https://api.github.com/repos/yurowm/crosspoint-reader/releases/latest";
+constexpr const char* releaseUrls[] = {primaryReleaseUrl, fallbackReleaseUrl};
 
 struct FirmwareVersion {
   int major = 0;
@@ -37,12 +41,17 @@ bool parseFirmwareVersion(const char* value, FirmwareVersion& version) {
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   LOG_DBG("OTA", "Checking for update (current: %s)", CROSSPOINT_VERSION);
 
+  updateAvailable = false;
+  latestVersion.clear();
+  otaUrl.clear();
+  otaSize = 0;
+  totalSize = 0;
+
   // Stream the ~32KB release JSON straight into the parser as it arrives.
   // Buffering the whole body in a std::string would add a growing allocation
   // on top of the TLS session's heap during the fetch; with -fno-exceptions an
   // OOM there aborts. fetchUrl handles the verified-https GET, redirects, and
   // User-Agent (see HttpDownloader).
-  ReleaseJsonParser releaseParser;
   // Each board updates from its own release asset: plain firmware.bin for the
   // C3 X4/X3 binary (pre-existing releases), firmware-<board>.bin otherwise.
   const bool isX4 = board_tag::boardNameLen() == 2 && memcmp(board_tag::boardName(), "x4", 2) == 0;
@@ -51,40 +60,47 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
     snprintf(assetName, sizeof(assetName), "firmware-%.*s.bin", static_cast<int>(board_tag::boardNameLen()),
              board_tag::boardName());
   }
-  releaseParser.setFirmwareAssetName(assetName);
-  const bool ok = HttpDownloader::fetchUrl(latestReleaseUrl, [&releaseParser](const uint8_t* data, size_t len) {
-    releaseParser.feed(reinterpret_cast<const char*>(data), len);
-    return true;
-  });
-  if (!ok) {
-    LOG_ERR("OTA", "Release check fetch failed");
-    return HTTP_ERROR;
+  OtaUpdaterError lastError = HTTP_ERROR;
+  for (const char* releaseUrl : releaseUrls) {
+    ReleaseJsonParser releaseParser;
+    releaseParser.setFirmwareAssetName(assetName);
+    const bool ok = HttpDownloader::fetchUrl(releaseUrl, [&releaseParser](const uint8_t* data, size_t len) {
+      releaseParser.feed(reinterpret_cast<const char*>(data), len);
+      return true;
+    });
+    if (!ok) {
+      LOG_ERR("OTA", "Release check fetch failed: %s", releaseUrl);
+      lastError = HTTP_ERROR;
+      continue;
+    }
+
+    LOG_DBG("OTA", "Parser results: tag=%s firmware=%s", releaseParser.foundTag() ? "yes" : "no",
+            releaseParser.foundFirmware() ? "yes" : "no");
+    if (!releaseParser.foundTag()) {
+      LOG_ERR("OTA", "No tag_name in release JSON: %s", releaseUrl);
+      lastError = JSON_PARSE_ERROR;
+      continue;
+    }
+    if (!releaseParser.foundFirmware()) {
+      LOG_INF("OTA", "No %s asset in release feed: %s", assetName, releaseUrl);
+      lastError = NO_UPDATE;
+      continue;
+    }
+
+    const char* releaseTag = releaseParser.getTagName();
+    const char* tagSeparator = strrchr(releaseTag, '/');
+    latestVersion = tagSeparator != nullptr ? tagSeparator + 1 : releaseTag;
+    otaUrl = releaseParser.getFirmwareUrl();
+    otaSize = releaseParser.getFirmwareSize();
+    totalSize = otaSize;
+    updateAvailable = true;
+
+    LOG_DBG("OTA", "Found update: tag=%s size=%zu", latestVersion.c_str(), otaSize);
+    LOG_DBG("OTA", "Firmware URL: %s", otaUrl.c_str());
+    return OK;
   }
 
-  LOG_DBG("OTA", "Parser results: tag=%s firmware=%s", releaseParser.foundTag() ? "yes" : "no",
-          releaseParser.foundFirmware() ? "yes" : "no");
-
-  if (!releaseParser.foundTag()) {
-    LOG_ERR("OTA", "No tag_name in release JSON");
-    return JSON_PARSE_ERROR;
-  }
-
-  if (!releaseParser.foundFirmware()) {
-    LOG_INF("OTA", "No %s asset in latest release", assetName);
-    return NO_UPDATE;
-  }
-
-  const char* releaseTag = releaseParser.getTagName();
-  const char* tagSeparator = strrchr(releaseTag, '/');
-  latestVersion = tagSeparator != nullptr ? tagSeparator + 1 : releaseTag;
-  otaUrl = releaseParser.getFirmwareUrl();
-  otaSize = releaseParser.getFirmwareSize();
-  totalSize = otaSize;
-  updateAvailable = true;
-
-  LOG_DBG("OTA", "Found update: tag=%s size=%zu", latestVersion.c_str(), otaSize);
-  LOG_DBG("OTA", "Firmware URL: %s", otaUrl.c_str());
-  return OK;
+  return lastError;
 }
 
 bool OtaUpdater::isUpdateNewer() const {

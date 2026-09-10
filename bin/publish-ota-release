@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: $0 <version> <model=firmware.bin> [model=firmware.bin ...]" >&2
+  exit 2
+}
+
+[ "$#" -ge 2 ] || usage
+
+version=$1
+shift
+
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+  echo "Invalid firmware version: $version" >&2
+  exit 2
+fi
+
+ota_root=${CROSSPOINT_OTA_ROOT:-/var/www/crosspoint-reader}
+base_url=${CROSSPOINT_OTA_BASE_URL:-https://server.yurowm.in/crosspoint-reader}
+release_dir="$ota_root/releases/$version"
+mkdir -p "$ota_root/releases"
+staging_dir=$(mktemp -d "$ota_root/.publish-$version-XXXXXX")
+manifest_assets='[]'
+
+cleanup() {
+  if [ -n "$staging_dir" ]; then
+    rm -rf -- "$staging_dir"
+  fi
+}
+trap cleanup EXIT
+
+for model_file in "$@"; do
+  model=${model_file%%=*}
+  firmware=${model_file#*=}
+  if [ "$model" = "$model_file" ] || [[ ! "$model" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+    echo "Invalid model mapping: $model_file" >&2
+    exit 2
+  fi
+  if [ ! -f "$firmware" ]; then
+    echo "Firmware not found: $firmware" >&2
+    exit 1
+  fi
+
+  if [ "$model" = x4 ]; then
+    asset_name=firmware.bin
+  else
+    asset_name="firmware-$model.bin"
+  fi
+  asset_size=$(stat -c %s "$firmware")
+  asset_sha256=$(sha256sum "$firmware" | awk '{print $1}')
+  install -m 0644 "$firmware" "$staging_dir/$asset_name"
+  manifest_assets=$(jq -c \
+    --arg name "$asset_name" \
+    --arg url "$base_url/releases/$version/$asset_name" \
+    --arg sha256 "$asset_sha256" \
+    --argjson size "$asset_size" \
+    '. + [{name: $name, browser_download_url: $url, size: $size, sha256: $sha256}]' \
+    <<<"$manifest_assets")
+done
+
+jq -n \
+  --arg tag "release/$version" \
+  --argjson assets "$manifest_assets" \
+  '{tag_name: $tag, assets: $assets}' >"$staging_dir/latest.json"
+
+if [ -e "$release_dir" ]; then
+  echo "Release already exists: $release_dir" >&2
+  exit 1
+fi
+mv "$staging_dir" "$release_dir"
+staging_dir=""
+mv "$release_dir/latest.json" "$ota_root/.latest.json.new"
+mv "$ota_root/.latest.json.new" "$ota_root/latest.json"
+trap - EXIT
+
+echo "Published release/$version"
+for model_file in "$@"; do
+  echo "  ${model_file%%=*}"
+done
