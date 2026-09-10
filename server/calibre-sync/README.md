@@ -9,8 +9,9 @@ same HTTP Basic credentials:
 ```
 
 Install `generate_manifest.py` in `/usr/local/lib/crosspoint-reader`, install
-the three systemd units, and enable both `crosspoint-calibre-sync.service` and
-`crosspoint-calibre-manifest.timer`. Include `nginx-location.conf` in the
+the manifest systemd service and timer, and enable
+`crosspoint-calibre-manifest.timer`. Mount `/var/lib/crosspoint-sync` read-only
+at the same path in the Nginx container. Include `nginx-location.conf` in the
 public Calibre virtual host before its generic `/calibre/` location.
 
 The timer scans `/opt/media/ebooks` every minute. Unchanged files reuse their
