@@ -312,18 +312,23 @@ void CalibreSyncActivity::runSync() {
     return;
   }
 
-  for (auto it = records.begin(); it != records.end();) {
-    if (it->serverUrl == key && !containsBookId(books, it->bookId)) {
-      clearBookCache(it->path);
-      if (!Storage.exists(it->path.c_str()) || Storage.remove(it->path.c_str())) {
-        it = records.erase(it);
-        ++removed;
-        libraryChanged = true;
-        continue;
+  // Remote deletion is the final commit step. If any download failed, keep
+  // every existing synchronized book so a transient network or SD error can
+  // never turn a partial refresh into data loss.
+  if (errors == 0) {
+    for (auto it = records.begin(); it != records.end();) {
+      if (it->serverUrl == key && !containsBookId(books, it->bookId)) {
+        clearBookCache(it->path);
+        if (!Storage.exists(it->path.c_str()) || Storage.remove(it->path.c_str())) {
+          it = records.erase(it);
+          ++removed;
+          libraryChanged = true;
+          continue;
+        }
+        ++errors;
       }
-      ++errors;
+      ++it;
     }
-    ++it;
   }
 
   if (!CalibreSyncStore::save(records)) {
