@@ -1,0 +1,8 @@
+[Unit]
+Description=Generate CrossPoint Calibre sync manifest
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/crosspoint-reader/generate_manifest.py /opt/media/ebooks /var/lib/crosspoint-sync
+User=calibre-server
+Group=calibre-server

@@ -1,15 +1,19 @@
 #include "CalibreSyncActivity.h"
 
+#include <ArduinoJson.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <OpdsStream.h>
 #include <WiFi.h>
+#include <mbedtls/sha256.h>
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
+#include <memory>
+#include <new>
 
 #include "CrossPointSettings.h"
 #include "LibraryIndex.h"
@@ -20,12 +24,12 @@
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
-#include "util/OpdsFilename.h"
+#include "util/StringUtils.h"
 #include "util/UrlUtils.h"
 
 namespace {
 constexpr size_t MAX_SYNC_BOOKS = 2000;
-constexpr size_t MAX_CATALOG_PAGES = 100;
+constexpr size_t HASH_CHUNK = 4096;
 
 uint32_t fnv1a(const std::string& value) {
   uint32_t hash = 2166136261u;
@@ -36,8 +40,19 @@ uint32_t fnv1a(const std::string& value) {
   return hash;
 }
 
-bool containsBookId(const std::vector<OpdsEntry>& books, const std::string& id) {
-  return std::any_of(books.begin(), books.end(), [&id](const OpdsEntry& book) { return book.id == id; });
+bool containsBookId(const std::vector<CalibreManifestBook>& books, const std::string& id) {
+  return std::any_of(books.begin(), books.end(), [&id](const CalibreManifestBook& book) { return book.id == id; });
+}
+
+bool validSha256(const std::string& value) {
+  return value.size() == 64 && std::all_of(value.begin(), value.end(), [](const unsigned char c) {
+           return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+         });
+}
+
+std::string basename(const std::string& path) {
+  const size_t slash = path.find_last_of("/\\");
+  return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
 void invalidateBookCachePreservingProgress(const std::string& path) {
@@ -102,74 +117,53 @@ std::string CalibreSyncActivity::serverKey() const {
   return key;
 }
 
-std::string CalibreSyncActivity::opdsRootUrl() const {
+std::string CalibreSyncActivity::syncRootUrl() const {
   std::string base = serverKey();
-  std::string query;
   const size_t queryAt = base.find('?');
-  if (queryAt != std::string::npos) {
-    query = base.substr(queryAt);
-    base.erase(queryAt);
-  }
+  if (queryAt != std::string::npos) base.erase(queryAt);
   while (!base.empty() && base.back() == '/') base.pop_back();
-  if (base.size() < 5 || base.compare(base.size() - 5, 5, "/opds") != 0) base += "/opds";
-  return base + query;
+  if (base.size() >= 5 && base.compare(base.size() - 5, 5, "/opds") == 0) base.erase(base.size() - 5);
+  return base + "/crosspoint-sync/v1/";
 }
 
-bool CalibreSyncActivity::discoverCatalogUrl(std::string& url) {
-  const std::string rootUrl = opdsRootUrl();
-  OpdsParser parser;
-  {
-    OpdsParserStream stream(parser);
-    if (!HttpDownloader::fetchUrl(rootUrl, stream, server.username, server.password)) return false;
-  }
-  if (!parser || parser.truncated()) return false;
-
-  // Calibre supplies the active library_id in its navigation links. Discover
-  // the "Newest" feed instead of assuming the library is named "ebooks".
-  for (const auto& entry : parser.getEntries()) {
-    if (entry.type == OpdsEntryType::NAVIGATION && entry.href.find("/navcatalog/4f6e6577657374") != std::string::npos) {
-      url = UrlUtils::buildUrl(rootUrl, entry.href);
-      return !url.empty();
-    }
-  }
-  return false;
-}
-
-bool CalibreSyncActivity::fetchCatalog(std::vector<OpdsEntry>& books) {
+bool CalibreSyncActivity::fetchManifest(std::vector<CalibreManifestBook>& books) {
   books.clear();
-  std::string pageUrl;
-  if (!discoverCatalogUrl(pageUrl)) return false;
-  for (size_t page = 0; page < MAX_CATALOG_PAGES && !pageUrl.empty(); ++page) {
-    updateProgress(tr(STR_CALIBRE_SYNC_CATALOG), page + 1, 0);
-    OpdsParser parser;
-    {
-      OpdsParserStream stream(parser);
-      if (!HttpDownloader::fetchUrl(pageUrl, stream, server.username, server.password)) return false;
-    }
-    if (!parser || parser.truncated()) return false;
-
-    const std::string next = parser.getNextPageUrl();
-    auto entries = std::move(parser).getEntries();
-    for (auto& entry : entries) {
-      if (entry.type != OpdsEntryType::BOOK || entry.id.empty() || entry.href.empty()) continue;
-      if (!containsBookId(books, entry.id)) books.push_back(std::move(entry));
-      if (books.size() > MAX_SYNC_BOOKS) return false;
-    }
-    if (next.empty()) return true;
-    const std::string resolved = UrlUtils::buildUrl(pageUrl, next);
-    if (resolved == pageUrl) return false;
-    pageUrl = resolved;
+  updateProgress(tr(STR_CALIBRE_SYNC_CATALOG), 0, 0);
+  std::string payload;
+  if (!HttpDownloader::fetchUrl(syncRootUrl() + "manifest.json", payload, server.username, server.password)) {
+    return false;
   }
-  return pageUrl.empty();
+  JsonDocument doc;
+  if (deserializeJson(doc, payload) || (doc["version"] | 0) != 1) return false;
+  if (!doc["books"].is<JsonArrayConst>()) return false;
+  const JsonArrayConst items = doc["books"].as<JsonArrayConst>();
+  if (items.size() > MAX_SYNC_BOOKS) return false;
+  books.reserve(items.size());
+  for (const JsonObjectConst item : items) {
+    CalibreManifestBook book;
+    book.id = item["path"] | "";
+    book.title = basename(book.id);
+    book.href = item["url"] | "";
+    book.sha256 = item["sha256"] | "";
+    book.size = item["size"] | 0;
+    const std::string expectedHref = "books/" + book.sha256 + ".epub";
+    if (book.id.empty() || book.id.front() == '/' || book.id.find("../") != std::string::npos ||
+        book.href != expectedHref || !validSha256(book.sha256) || book.size == 0 || containsBookId(books, book.id)) {
+      return false;
+    }
+    books.push_back(std::move(book));
+  }
+  return true;
 }
 
-std::string CalibreSyncActivity::destinationFor(const OpdsEntry& book,
+std::string CalibreSyncActivity::destinationFor(const CalibreManifestBook& book,
                                                 const std::vector<CalibreSyncRecord>& records) const {
   std::string folder = SETTINGS.opdsDownloadFolder;
   while (!folder.empty() && folder.back() == '/') folder.pop_back();
-  std::string path =
-      folder + "/" +
-      opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
+  std::string filename = basename(book.id);
+  if (filename.size() >= 5 && filename.compare(filename.size() - 5, 5, ".epub") == 0)
+    filename.resize(filename.size() - 5);
+  std::string path = folder + "/" + StringUtils::sanitizeFilename(filename) + ".epub";
   const bool occupiedBySync = std::any_of(records.begin(), records.end(),
                                           [&path](const CalibreSyncRecord& record) { return record.path == path; });
   if (!Storage.exists(path.c_str()) && !occupiedBySync) return path;
@@ -181,6 +175,36 @@ std::string CalibreSyncActivity::destinationFor(const OpdsEntry& book,
   return path;
 }
 
+bool CalibreSyncActivity::verifyDownload(const std::string& path, const CalibreManifestBook& book) const {
+  HalFile file;
+  if (!Storage.openFileForRead("CSYNC", path, file) || file.size() != book.size) return false;
+  auto buffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[HASH_CHUNK]);
+  if (!buffer) {
+    file.close();
+    return false;
+  }
+  mbedtls_sha256_context context;
+  mbedtls_sha256_init(&context);
+  mbedtls_sha256_starts(&context, 0);
+  while (file.available()) {
+    const int count = file.read(buffer.get(), HASH_CHUNK);
+    if (count <= 0) {
+      mbedtls_sha256_free(&context);
+      file.close();
+      return false;
+    }
+    mbedtls_sha256_update(&context, buffer.get(), count);
+  }
+  uint8_t digest[32];
+  mbedtls_sha256_finish(&context, digest);
+  mbedtls_sha256_free(&context);
+  file.close();
+  char hexadecimal[65];
+  for (size_t i = 0; i < sizeof(digest); ++i) snprintf(hexadecimal + i * 2, 3, "%02x", digest[i]);
+  hexadecimal[64] = '\0';
+  return book.sha256 == hexadecimal;
+}
+
 void CalibreSyncActivity::updateProgress(const std::string& text, const size_t item, const size_t total) {
   statusText = text;
   currentItem = item;
@@ -189,8 +213,8 @@ void CalibreSyncActivity::updateProgress(const std::string& text, const size_t i
 }
 
 void CalibreSyncActivity::runSync() {
-  std::vector<OpdsEntry> books;
-  if (!fetchCatalog(books)) {
+  std::vector<CalibreManifestBook> books;
+  if (!fetchManifest(books)) {
     state = FAILED;
     requestUpdate();
     return;
@@ -226,13 +250,13 @@ void CalibreSyncActivity::runSync() {
         Storage.remove(backup.c_str());
       }
     }
-    const bool needsDownload = isNew || old->updated != book.updated || !Storage.exists(old->path.c_str());
+    const bool needsDownload = isNew || old->updated != book.sha256 || !Storage.exists(old->path.c_str());
     if (!needsDownload) continue;
 
     updateProgress(book.title, i + 1, books.size());
     const std::string destination = isNew ? destinationFor(book, records) : old->path;
     const std::string temporary = destination + ".part";
-    const std::string downloadUrl = UrlUtils::buildUrl(opdsRootUrl(), book.href);
+    const std::string downloadUrl = UrlUtils::buildUrl(syncRootUrl(), book.href);
     const auto result = HttpDownloader::downloadToFile(
         downloadUrl, temporary,
         [this](const size_t, const size_t) {
@@ -244,6 +268,11 @@ void CalibreSyncActivity::runSync() {
         &cancelRequested, server.username, server.password);
     if (result != HttpDownloader::OK) {
       if (result != HttpDownloader::ABORTED) ++errors;
+      continue;
+    }
+    if (!verifyDownload(temporary, book)) {
+      Storage.remove(temporary.c_str());
+      ++errors;
       continue;
     }
     const std::string backup = destination + ".bak";
@@ -265,10 +294,10 @@ void CalibreSyncActivity::runSync() {
     if (hadOldFile) Storage.remove(backup.c_str());
     invalidateBookCachePreservingProgress(destination);
     if (isNew) {
-      records.push_back(CalibreSyncRecord{key, book.id, book.updated, destination});
+      records.push_back(CalibreSyncRecord{key, book.id, book.sha256, destination});
       ++added;
     } else {
-      old->updated = book.updated;
+      old->updated = book.sha256;
       old->path = destination;
       ++updated;
     }
