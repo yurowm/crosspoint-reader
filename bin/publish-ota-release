@@ -63,6 +63,8 @@ jq -n \
   --arg tag "release/$version" \
   --argjson assets "$manifest_assets" \
   '{tag_name: $tag, assets: $assets}' >"$staging_dir/latest.json"
+chmod 0755 "$staging_dir"
+chmod 0644 "$staging_dir/latest.json"
 
 if [ -e "$release_dir" ]; then
   echo "Release already exists: $release_dir" >&2
