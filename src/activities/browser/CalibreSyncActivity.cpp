@@ -1,11 +1,11 @@
 #include "CalibreSyncActivity.h"
 
+#include <Epub.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
-#include <Epub.h>
 #include <WiFi.h>
 
 #include <algorithm>
@@ -102,7 +102,7 @@ std::string CalibreSyncActivity::serverKey() const {
   return key;
 }
 
-std::string CalibreSyncActivity::catalogUrl() const {
+std::string CalibreSyncActivity::opdsRootUrl() const {
   std::string base = serverKey();
   std::string query;
   const size_t queryAt = base.find('?');
@@ -112,12 +112,33 @@ std::string CalibreSyncActivity::catalogUrl() const {
   }
   while (!base.empty() && base.back() == '/') base.pop_back();
   if (base.size() < 5 || base.compare(base.size() - 5, 5, "/opds") != 0) base += "/opds";
-  return base + "/navcatalog/4f6e6577657374" + query;  // Calibre "Onewest": every book, newest first.
+  return base + query;
+}
+
+bool CalibreSyncActivity::discoverCatalogUrl(std::string& url) {
+  const std::string rootUrl = opdsRootUrl();
+  OpdsParser parser;
+  {
+    OpdsParserStream stream(parser);
+    if (!HttpDownloader::fetchUrl(rootUrl, stream, server.username, server.password)) return false;
+  }
+  if (!parser || parser.truncated()) return false;
+
+  // Calibre supplies the active library_id in its navigation links. Discover
+  // the "Newest" feed instead of assuming the library is named "ebooks".
+  for (const auto& entry : parser.getEntries()) {
+    if (entry.type == OpdsEntryType::NAVIGATION && entry.href.find("/navcatalog/4f6e6577657374") != std::string::npos) {
+      url = UrlUtils::buildUrl(rootUrl, entry.href);
+      return !url.empty();
+    }
+  }
+  return false;
 }
 
 bool CalibreSyncActivity::fetchCatalog(std::vector<OpdsEntry>& books) {
   books.clear();
-  std::string pageUrl = catalogUrl();
+  std::string pageUrl;
+  if (!discoverCatalogUrl(pageUrl)) return false;
   for (size_t page = 0; page < MAX_CATALOG_PAGES && !pageUrl.empty(); ++page) {
     updateProgress(tr(STR_CALIBRE_SYNC_CATALOG), page + 1, 0);
     OpdsParser parser;
@@ -146,12 +167,11 @@ std::string CalibreSyncActivity::destinationFor(const OpdsEntry& book,
                                                 const std::vector<CalibreSyncRecord>& records) const {
   std::string folder = SETTINGS.opdsDownloadFolder;
   while (!folder.empty() && folder.back() == '/') folder.pop_back();
-  std::string path = folder + "/" +
-                     opdsBookFilename(book.author, book.title,
-                                      static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
-  const bool occupiedBySync = std::any_of(records.begin(), records.end(), [&path](const CalibreSyncRecord& record) {
-    return record.path == path;
-  });
+  std::string path =
+      folder + "/" +
+      opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
+  const bool occupiedBySync = std::any_of(records.begin(), records.end(),
+                                          [&path](const CalibreSyncRecord& record) { return record.path == path; });
   if (!Storage.exists(path.c_str()) && !occupiedBySync) return path;
 
   char suffix[20];
@@ -212,7 +232,7 @@ void CalibreSyncActivity::runSync() {
     updateProgress(book.title, i + 1, books.size());
     const std::string destination = isNew ? destinationFor(book, records) : old->path;
     const std::string temporary = destination + ".part";
-    const std::string downloadUrl = UrlUtils::buildUrl(catalogUrl(), book.href);
+    const std::string downloadUrl = UrlUtils::buildUrl(opdsRootUrl(), book.href);
     const auto result = HttpDownloader::downloadToFile(
         downloadUrl, temporary,
         [this](const size_t, const size_t) {
@@ -296,8 +316,8 @@ void CalibreSyncActivity::loop() {
   if (state == COMPLETE || state == FAILED || state == CANCELLED) {
     int x = 0;
     int y = 0;
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
-        mappedInput.wasScreenTapped(x, y)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
       finish();
     }
   }
@@ -323,8 +343,7 @@ void CalibreSyncActivity::render(RenderLock&&) {
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == COMPLETE) {
-    renderer.drawCenteredText(UI_12_FONT_ID, midY - 25, tr(STR_CALIBRE_SYNC_COMPLETE), true,
-                              EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, midY - 25, tr(STR_CALIBRE_SYNC_COMPLETE), true, EpdFontFamily::BOLD);
     char summary[96];
     snprintf(summary, sizeof(summary), "%s: %d   %s: %d", tr(STR_CALIBRE_SYNC_ADDED), added,
              tr(STR_CALIBRE_SYNC_UPDATED), updated);

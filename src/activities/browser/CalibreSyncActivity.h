@@ -39,7 +39,8 @@ class CalibreSyncActivity final : public Activity {
   void onWifiSelectionComplete(bool connected);
   void runSync();
   bool fetchCatalog(std::vector<OpdsEntry>& books);
-  std::string catalogUrl() const;
+  bool discoverCatalogUrl(std::string& url);
+  std::string opdsRootUrl() const;
   std::string serverKey() const;
   std::string destinationFor(const OpdsEntry& book, const std::vector<CalibreSyncRecord>& records) const;
   void updateProgress(const std::string& text, size_t item, size_t total);
