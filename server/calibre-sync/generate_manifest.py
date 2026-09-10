@@ -49,7 +49,9 @@ def main() -> int:
         if not destination.exists() or destination.stat().st_size != stat.st_size or sha256(destination) != digest:
             temporary = books_dir / f".{asset}.part"
             shutil.copy2(path, temporary)
+            temporary.chmod(0o644)
             os.replace(temporary, destination)
+        destination.chmod(0o644)
         used_assets.add(asset)
         books.append({
             "path": relative,
@@ -69,6 +71,7 @@ def main() -> int:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(payload, stream, ensure_ascii=False, separators=(",", ":"))
             stream.write("\n")
+        os.chmod(temporary_name, 0o644)
         os.replace(temporary_name, manifest_path)
     finally:
         if os.path.exists(temporary_name):
