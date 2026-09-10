@@ -81,11 +81,10 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     // append a second User-Agent header, which strict servers reject (aiohttp
     // answers 400 "Duplicate 'User-Agent' header found").
     http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
-    if (!username.empty() && !password.empty()) {
-      const std::string credentials = username + ":" + password;
-      const String encoded = base64::encode(credentials.c_str());
-      http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
-    }
+    // SecureHttpClient owns Basic authentication. Adding Authorization as a
+    // custom header as well would emit it twice; Calibre rejects duplicated
+    // Authorization headers with HTTP 400.
+    if (!username.empty()) http.setBasicAuth(username, password);
 
     LOG_DBG("HTTP", "wolfSSL GET: %s", url.c_str());
     const int status = http.GET(
