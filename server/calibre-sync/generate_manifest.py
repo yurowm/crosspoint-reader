@@ -180,8 +180,11 @@ def main() -> int:
     for path in sorted(source.rglob("*")):
         if not path.is_file() or path.suffix.lower() != ".epub":
             continue
+        relative_path = path.relative_to(source)
+        if any(part.startswith(".") for part in relative_path.parts[:-1]):
+            continue
         stat = path.stat()
-        relative = path.relative_to(source).as_posix()
+        relative = relative_path.as_posix()
         previous = old.get(relative, {})
         if previous.get("size") == stat.st_size and previous.get("mtime_ns") == stat.st_mtime_ns:
             digest = previous.get("sha256", "")

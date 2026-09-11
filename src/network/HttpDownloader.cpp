@@ -13,17 +13,25 @@
 #include <SecureHttpClient.h>
 
 extern "C" void wolfSSL_Arduino_Serial_Print(const char* const msg) { LOG_DBG("WOLFSSL", "%s", msg); }
-#else
+#endif
+
+#if !defined(FREEINK_NET_WOLFSSL) || FREEINK_DEVICE_X4PRO
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #endif
 
 namespace {
-#if !defined(FREEINK_NET_WOLFSSL)
+#if !defined(FREEINK_NET_WOLFSSL) || FREEINK_DEVICE_X4PRO
 // RX holds the response headers. Smaller buffers leave enough contiguous heap
 // for mbedTLS on redirect-heavy OPDS feeds while still preserving the headers
 // we read directly (Location, Content-Length).
+#if FREEINK_DEVICE_X4PRO
+constexpr int HTTP_RX_BUF = 8192;
+constexpr size_t READ_CHUNK = 8192;
+#else
 constexpr int HTTP_RX_BUF = 2048;
+constexpr size_t READ_CHUNK = 1024;
+#endif
 constexpr int HTTP_TX_BUF = 512;
 #endif
 // Per-socket-op timeout. Some OPDS download endpoints are slow to send headers
@@ -31,7 +39,6 @@ constexpr int HTTP_TX_BUF = 512;
 // slow servers room. esp_http_client's timeout_ms is uint32, so unlike Arduino
 // HTTPClient's uint16 setTimeout it doesn't silently truncate.
 constexpr int HTTP_TIMEOUT_MS = 60000;
-constexpr size_t READ_CHUNK = 1024;
 constexpr int MAX_REDIRECTS = 5;
 
 struct Sink {
@@ -127,7 +134,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
 }
 #endif
 
-#if !defined(FREEINK_NET_WOLFSSL)
+#if !defined(FREEINK_NET_WOLFSSL) || FREEINK_DEVICE_X4PRO
 // Streams a GET body through sink.write in READ_CHUNK pieces. Uses the manual
 // open/fetch_headers/read path rather than esp_http_client_perform(): perform()
 // pushes the whole body through an event callback and reports a chunked body
@@ -233,15 +240,14 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   }
   return HttpDownloader::OK;
 }
-#endif  // !FREEINK_NET_WOLFSSL
+#endif  // !FREEINK_NET_WOLFSSL || FREEINK_DEVICE_X4PRO
 
-// All HTTP(S) fetches go through wolfSSL when it is the active TLS stack: it
-// speaks TLS 1.3 and reads large bodies from servers where the esp_http_client/
-// mbedTLS path fails to connect or stalls mid-stream. Plain-http URLs still use a
-// WiFiClient inside runGetWolf, so this is safe for non-TLS targets too.
+// X4 Pro uses ESP-IDF's native HTTP/mbedTLS stack and larger buffers. Its S3
+// has enough memory for that path and benefits from the platform's optimized
+// crypto implementation. Low-memory wolfSSL targets keep their existing path.
 HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::string& username,
                                            const std::string& password, Sink& sink) {
-#if defined(FREEINK_NET_WOLFSSL)
+#if defined(FREEINK_NET_WOLFSSL) && !FREEINK_DEVICE_X4PRO
   return runGetWolf(url, username, password, sink);
 #else
   return runGet(url, username, password, sink);

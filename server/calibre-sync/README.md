@@ -23,3 +23,5 @@ The timer scans `/opt/media/ebooks` every minute. Unchanged files reuse their
 previous checksum and metadata based on size and nanosecond mtime; changed files
 are hashed, indexed, and copied atomically to `/var/lib/crosspoint-sync/books`.
 Removed files are removed from the next manifest and from the asset directory.
+Directories whose names start with a dot are excluded, including Calibre's
+`.caltrash` directory.
