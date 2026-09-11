@@ -30,6 +30,7 @@
 namespace {
 constexpr size_t MAX_SYNC_BOOKS = 2000;
 constexpr size_t HASH_CHUNK = 4096;
+constexpr size_t MAX_METADATA_LIST_ITEMS = 64;
 
 uint32_t fnv1a(const std::string& value) {
   uint32_t hash = 2166136261u;
@@ -77,10 +78,45 @@ void invalidateBookCachePreservingProgress(const std::string& path) {
   output.close();
 }
 
-void invalidateLibraryEntry(const std::string& path) {
-  // Keep all unaffected metadata cached. If the targeted index rewrite fails,
-  // removing the complete index is safer than retaining stale metadata.
-  if (!LibraryIndex::invalidate(path)) Storage.remove(LibraryIndex::FILE_PATH);
+bool readStringList(const JsonVariantConst value, std::vector<std::string>& output) {
+  output.clear();
+  if (value.isNull()) return true;
+  if (!value.is<JsonArrayConst>()) return false;
+  const JsonArrayConst items = value.as<JsonArrayConst>();
+  if (items.size() > MAX_METADATA_LIST_ITEMS) return false;
+  output.reserve(items.size());
+  for (const JsonVariantConst item : items) {
+    if (!item.is<const char*>()) return false;
+    output.emplace_back(item.as<const char*>());
+  }
+  return true;
+}
+
+bool readFileInfo(const std::string& path, LibraryFileInfo& info) {
+  HalFile file = Storage.open(path.c_str());
+  if (!file || file.isDirectory()) return false;
+  info.path = path;
+  info.fileSize = file.fileSize64();
+  file.getModifyDateTime(info.modifiedDate, info.modifiedTime);
+  file.close();
+  return true;
+}
+
+LibraryBook manifestLibraryBook(const CalibreManifestBook& source, const LibraryFileInfo& file) {
+  LibraryBook book;
+  book.path = file.path;
+  book.fileSize = file.fileSize;
+  book.modifiedDate = file.modifiedDate;
+  book.modifiedTime = file.modifiedTime;
+  book.title = source.title;
+  book.author = source.author;
+  book.authors = source.authors;
+  book.series = source.series;
+  book.seriesIndex = source.seriesIndex;
+  book.year = source.year;
+  book.tags = source.tags;
+  book.visibleCharacterCount = source.visibleCharacterCount;
+  return book;
 }
 }  // namespace
 
@@ -152,6 +188,22 @@ bool CalibreSyncActivity::fetchManifest(std::vector<CalibreManifestBook>& books)
     book.href = item["url"] | "";
     book.sha256 = item["sha256"] | "";
     book.size = item["size"] | 0;
+    const JsonObjectConst metadata = item["metadata"].as<JsonObjectConst>();
+    if (!metadata.isNull()) {
+      const char* title = metadata["title"] | "";
+      if (title[0] != '\0') book.title = title;
+      if (!readStringList(metadata["authors"], book.authors) || !readStringList(metadata["tags"], book.tags)) {
+        return false;
+      }
+      for (const auto& author : book.authors) {
+        if (!book.author.empty()) book.author += ", ";
+        book.author += author;
+      }
+      book.series = metadata["series"] | "";
+      book.seriesIndex = metadata["series_index"] | "";
+      book.year = metadata["year"] | "";
+      book.visibleCharacterCount = metadata["characters"] | 0;
+    }
     const std::string expectedHref = "books/" + book.sha256 + ".epub";
     if (book.id.empty() || book.id.front() == '/' || book.id.find("../") != std::string::npos ||
         book.href != expectedHref || !validSha256(book.sha256) || book.size == 0 || containsBookId(books, book.id)) {
@@ -233,6 +285,10 @@ void CalibreSyncActivity::runSync() {
     return;
   }
   const std::string key = serverKey();
+  std::vector<LibraryBook> indexedBooks;
+  LibraryIndex::load(indexedBooks);
+  std::vector<LibraryBook> indexReplacements;
+  std::vector<std::string> indexRemovals;
   const char* folder = SETTINGS.opdsDownloadFolder;
   if (folder[0] && !Storage.exists(folder) && !Storage.mkdir(folder)) {
     state = FAILED;
@@ -256,7 +312,15 @@ void CalibreSyncActivity::runSync() {
       }
     }
     const bool needsDownload = isNew || old->updated != book.sha256 || !Storage.exists(old->path.c_str());
-    if (!needsDownload) continue;
+    if (!needsDownload) {
+      const bool indexed = std::any_of(indexedBooks.begin(), indexedBooks.end(),
+                                       [&old](const LibraryBook& item) { return item.path == old->path; });
+      if (!indexed) {
+        LibraryFileInfo file;
+        if (readFileInfo(old->path, file)) indexReplacements.push_back(manifestLibraryBook(book, file));
+      }
+      continue;
+    }
 
     updateProgress(book.title, i + 1, books.size());
     const std::string destination = isNew ? destinationFor(book, records) : old->path;
@@ -298,7 +362,13 @@ void CalibreSyncActivity::runSync() {
     }
     if (hadOldFile) Storage.remove(backup.c_str());
     invalidateBookCachePreservingProgress(destination);
-    invalidateLibraryEntry(destination);
+    LibraryFileInfo file;
+    if (readFileInfo(destination, file)) {
+      indexReplacements.push_back(manifestLibraryBook(book, file));
+    } else {
+      ++errors;
+      continue;
+    }
     if (isNew) {
       records.push_back(CalibreSyncRecord{key, book.id, book.sha256, destination});
       ++added;
@@ -323,8 +393,8 @@ void CalibreSyncActivity::runSync() {
     for (auto it = records.begin(); it != records.end();) {
       if (it->serverUrl == key && !containsBookId(books, it->bookId)) {
         clearBookCache(it->path);
-        invalidateLibraryEntry(it->path);
         if (!Storage.exists(it->path.c_str()) || Storage.remove(it->path.c_str())) {
+          indexRemovals.push_back(it->path);
           it = records.erase(it);
           ++removed;
           continue;
@@ -335,7 +405,7 @@ void CalibreSyncActivity::runSync() {
     }
   }
 
-  if (!CalibreSyncStore::save(records)) {
+  if (!LibraryIndex::applyChanges(indexReplacements, indexRemovals) || !CalibreSyncStore::save(records)) {
     state = FAILED;
   } else {
     state = COMPLETE;

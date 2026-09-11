@@ -233,6 +233,40 @@ bool LibraryIndex::invalidate(const std::string& path) {
   return save(books);
 }
 
+bool LibraryIndex::applyChanges(const std::vector<LibraryBook>& replacements,
+                                const std::vector<std::string>& removals) {
+  std::vector<LibraryBook> books;
+  load(books);
+  bool changed = false;
+
+  for (const auto& path : removals) {
+    const auto end =
+        std::remove_if(books.begin(), books.end(), [&path](const LibraryBook& book) { return book.path == path; });
+    if (end != books.end()) {
+      books.erase(end, books.end());
+      changed = true;
+    }
+  }
+
+  for (const auto& replacement : replacements) {
+    auto existing = std::find_if(books.begin(), books.end(),
+                                 [&replacement](const LibraryBook& book) { return book.path == replacement.path; });
+    LibraryBook merged = replacement;
+    if (existing != books.end()) {
+      merged.started = existing->started;
+      merged.progressPercent = existing->progressPercent;
+      merged.progressBasisPoints = existing->progressBasisPoints;
+      merged.deferred = existing->deferred;
+      *existing = std::move(merged);
+    } else {
+      books.push_back(std::move(merged));
+    }
+    changed = true;
+  }
+
+  return !changed || save(books);
+}
+
 bool LibraryIndex::sourceMatches(const LibraryBook& book, const LibraryFileInfo& file) {
   return book.path == file.path && book.fileSize == file.fileSize && book.modifiedDate == file.modifiedDate &&
          book.modifiedTime == file.modifiedTime;

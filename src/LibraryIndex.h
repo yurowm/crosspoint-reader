@@ -54,6 +54,9 @@ class LibraryIndex {
   static bool updateProgress(const std::string& path, uint8_t progressPercent);
   static bool setProgressState(const std::string& path, uint8_t progressPercent, bool started);
   static bool invalidate(const std::string& path);
+  // Applies metadata replacements and removals with a single index rewrite.
+  // Existing reading progress is preserved for replaced paths.
+  static bool applyChanges(const std::vector<LibraryBook>& replacements, const std::vector<std::string>& removals = {});
 
   static bool sourceMatches(const LibraryBook& book, const LibraryFileInfo& file);
 };

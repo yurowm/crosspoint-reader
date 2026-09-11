@@ -12,6 +12,13 @@ struct CalibreManifestBook {
   std::string title;
   std::string href;
   std::string sha256;
+  std::string author;
+  std::vector<std::string> authors;
+  std::string series;
+  std::string seriesIndex;
+  std::string year;
+  std::vector<std::string> tags;
+  uint32_t visibleCharacterCount = 0;
   size_t size = 0;
 };
 
