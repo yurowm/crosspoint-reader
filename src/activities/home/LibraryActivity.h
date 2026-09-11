@@ -25,7 +25,6 @@ class LibraryActivity final : public Activity {
 
   bool scanLibrary(bool indexLoaded);
   bool scanDirectory(const std::string& path, std::vector<LibraryFileInfo>& bookFiles);
-  LibraryBook loadBook(const LibraryFileInfo& file);
   void openFilters();
   void openBookMenu(LibraryBook& book);
   std::vector<size_t> filteredBookIndices() const;
@@ -47,4 +46,8 @@ class LibraryActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+
+  // Shared by lightweight library views that need to populate a missing or
+  // stale index entry without forcing a full-library scan.
+  static LibraryBook loadBook(const LibraryFileInfo& file);
 };

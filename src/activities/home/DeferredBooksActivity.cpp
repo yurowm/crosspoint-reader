@@ -5,14 +5,17 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
+
 #include <algorithm>
 
+#include "LibraryActivity.h"
 #include "LibraryBookMenuActivity.h"
 #include "LibraryBookStateStore.h"
 #include "MappedInputManager.h"
 #include "components/BookListItem.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookCacheUtils.h"
 #include "util/BookPageEstimator.h"
 
 namespace {
@@ -20,20 +23,13 @@ constexpr unsigned long CONFIRM_HOLD_MS = 1000;
 constexpr unsigned long NAVIGATION_REPEAT_START_MS = 500;
 constexpr unsigned long NAVIGATION_REPEAT_INTERVAL_MS = 500;
 
-std::string filenameStem(const std::string& path) {
-  const size_t slash = path.find_last_of('/');
-  const size_t start = slash == std::string::npos ? 0 : slash + 1;
-  const size_t dot = path.find_last_of('.');
-  return dot == std::string::npos || dot <= start ? path.substr(start) : path.substr(start, dot - start);
-}
-
-bool enrichBook(const LibraryBook& indexed, void* rawBooks) {
-  auto& books = *static_cast<std::vector<LibraryBook>*>(rawBooks);
-  const auto found =
-      std::find_if(books.begin(), books.end(), [&indexed](const LibraryBook& book) { return book.path == indexed.path; });
-  if (found == books.end()) return true;
-  *found = indexed;
-  found->deferred = true;
+bool readFileInfo(const std::string& path, LibraryFileInfo& info) {
+  HalFile file = Storage.open(path.c_str());
+  if (!file || file.isDirectory()) return false;
+  info.path = path;
+  info.fileSize = file.fileSize64();
+  file.getModifyDateTime(info.modifiedDate, info.modifiedTime);
+  file.close();
   return true;
 }
 
@@ -55,17 +51,34 @@ ButtonHint deferredButtonHint(const MappedInputManager::NavigationAction action,
 
 void DeferredBooksActivity::loadBooks() {
   books.clear();
+  std::vector<LibraryBook> indexedBooks;
+  LibraryIndex::load(indexedBooks);
+  bool indexDirty = false;
   const auto& paths = LIBRARY_BOOK_STATE.getDeferredPaths();
   books.reserve(paths.size());
   for (const auto& path : paths) {
-    if (!Storage.exists(path.c_str())) continue;
-    LibraryBook book;
-    book.path = path;
-    book.title = filenameStem(path);
+    LibraryFileInfo file;
+    if (!readFileInfo(path, file)) continue;
+    auto indexed = std::find_if(indexedBooks.begin(), indexedBooks.end(),
+                                [&path](const LibraryBook& book) { return book.path == path; });
+    if (indexed == indexedBooks.end() || !LibraryIndex::sourceMatches(*indexed, file)) {
+      if (indexed != indexedBooks.end()) clearBookCache(path);
+      LibraryBook refreshed = LibraryActivity::loadBook(file);
+      if (indexed == indexedBooks.end()) {
+        indexedBooks.push_back(refreshed);
+        indexed = indexedBooks.end() - 1;
+      } else {
+        *indexed = std::move(refreshed);
+      }
+      indexDirty = true;
+    }
+    LibraryBook book = *indexed;
     book.deferred = true;
     books.push_back(std::move(book));
   }
-  LibraryIndex::visitBooks(&enrichBook, &books);
+  if (indexDirty && !LibraryIndex::save(indexedBooks)) {
+    LOG_ERR("DBA", "Failed to update library index");
+  }
 }
 
 void DeferredBooksActivity::onEnter() {
@@ -90,8 +103,7 @@ void DeferredBooksActivity::openBookMenu() {
   lockConfirmRelease = true;
   const uint32_t estimatedPages =
       BookPageEstimator::pageCount(books[selectorIndex].visibleCharacterCount, estimatedCharactersPerPage);
-  auto menu =
-      makeUniqueNoThrow<LibraryBookMenuActivity>(renderer, mappedInput, books[selectorIndex], estimatedPages);
+  auto menu = makeUniqueNoThrow<LibraryBookMenuActivity>(renderer, mappedInput, books[selectorIndex], estimatedPages);
   if (!menu) {
     LOG_ERR("DBA", "OOM: LibraryBookMenuActivity");
     lockConfirmRelease = false;
@@ -100,9 +112,8 @@ void DeferredBooksActivity::openBookMenu() {
   startActivityForResult(std::move(menu), [this](const ActivityResult&) {
     const std::string selectedPath = selectorIndex < books.size() ? books[selectorIndex].path : std::string();
     loadBooks();
-    const auto selected = std::find_if(books.begin(), books.end(), [&selectedPath](const LibraryBook& book) {
-      return book.path == selectedPath;
-    });
+    const auto selected = std::find_if(books.begin(), books.end(),
+                                       [&selectedPath](const LibraryBook& book) { return book.path == selectedPath; });
     selectorIndex = selected == books.end() ? std::min(selectorIndex, books.empty() ? size_t{0} : books.size() - 1)
                                             : static_cast<size_t>(selected - books.begin());
     lockConfirmRelease = false;
@@ -113,11 +124,10 @@ void DeferredBooksActivity::openBookMenu() {
 void DeferredBooksActivity::moveSelection(const bool next, const bool byPage) {
   const int count = static_cast<int>(books.size());
   const int current = static_cast<int>(selectorIndex);
-  selectorIndex = byPage
-                      ? (next ? ButtonNavigator::nextPageIndex(current, count, BookListItem::ITEMS_PER_PAGE)
-                              : ButtonNavigator::previousPageIndex(current, count, BookListItem::ITEMS_PER_PAGE))
-                      : (next ? ButtonNavigator::nextIndex(current, count)
-                              : ButtonNavigator::previousIndex(current, count));
+  selectorIndex =
+      byPage ? (next ? ButtonNavigator::nextPageIndex(current, count, BookListItem::ITEMS_PER_PAGE)
+                     : ButtonNavigator::previousPageIndex(current, count, BookListItem::ITEMS_PER_PAGE))
+             : (next ? ButtonNavigator::nextIndex(current, count) : ButtonNavigator::previousIndex(current, count));
   requestUpdate();
 }
 
@@ -137,10 +147,8 @@ void DeferredBooksActivity::loop() {
   const int contentHeight =
       renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
   const int rowHeight = BookListItem::rowHeight(contentHeight);
-  const int pageStart =
-      static_cast<int>(selectorIndex / BookListItem::ITEMS_PER_PAGE) * BookListItem::ITEMS_PER_PAGE;
-  const int visibleRows =
-      std::min(BookListItem::ITEMS_PER_PAGE, static_cast<int>(books.size()) - pageStart);
+  const int pageStart = static_cast<int>(selectorIndex / BookListItem::ITEMS_PER_PAGE) * BookListItem::ITEMS_PER_PAGE;
+  const int visibleRows = std::min(BookListItem::ITEMS_PER_PAGE, static_cast<int>(books.size()) - pageStart);
   int row = -1;
   const auto touch = mappedInput.rowTouch(row, contentTop, rowHeight + BookListItem::ROW_GAP, visibleRows, 0,
                                           renderer.getScreenWidth(), rowHeight);
@@ -203,7 +211,6 @@ void DeferredBooksActivity::loop() {
       return;
     }
   }
-
 }
 
 void DeferredBooksActivity::render(RenderLock&&) {
@@ -216,8 +223,7 @@ void DeferredBooksActivity::render(RenderLock&&) {
   if (!books.empty()) {
     const size_t pageCount = (books.size() + BookListItem::ITEMS_PER_PAGE - 1) / BookListItem::ITEMS_PER_PAGE;
     snprintf(pageCounter, sizeof(pageCounter), "%u / %u",
-             static_cast<unsigned>(selectorIndex / BookListItem::ITEMS_PER_PAGE + 1),
-             static_cast<unsigned>(pageCount));
+             static_cast<unsigned>(selectorIndex / BookListItem::ITEMS_PER_PAGE + 1), static_cast<unsigned>(pageCount));
     subtitle = pageCounter;
   }
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_DEFERRED_BOOKS),
@@ -230,13 +236,11 @@ void DeferredBooksActivity::render(RenderLock&&) {
                               contentTop + contentHeight / 2, tr(STR_NO_DEFERRED_BOOKS));
   } else {
     const int rowHeight = BookListItem::rowHeight(contentHeight);
-    const int pageStart =
-        static_cast<int>(selectorIndex / BookListItem::ITEMS_PER_PAGE) * BookListItem::ITEMS_PER_PAGE;
+    const int pageStart = static_cast<int>(selectorIndex / BookListItem::ITEMS_PER_PAGE) * BookListItem::ITEMS_PER_PAGE;
     const int sidePadding = metrics.contentSidePadding;
     const int rowWidth = pageWidth - sidePadding * 2;
-    for (int index = pageStart; index < static_cast<int>(books.size()) &&
-                                index < pageStart + BookListItem::ITEMS_PER_PAGE;
-         ++index) {
+    for (int index = pageStart;
+         index < static_cast<int>(books.size()) && index < pageStart + BookListItem::ITEMS_PER_PAGE; ++index) {
       const int rowY = contentTop + (index - pageStart) * (rowHeight + BookListItem::ROW_GAP);
       const uint32_t estimatedPages =
           BookPageEstimator::pageCount(books[index].visibleCharacterCount, estimatedCharactersPerPage);

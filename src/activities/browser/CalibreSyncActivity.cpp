@@ -76,6 +76,12 @@ void invalidateBookCachePreservingProgress(const std::string& path) {
   }
   output.close();
 }
+
+void invalidateLibraryEntry(const std::string& path) {
+  // Keep all unaffected metadata cached. If the targeted index rewrite fails,
+  // removing the complete index is safer than retaining stale metadata.
+  if (!LibraryIndex::invalidate(path)) Storage.remove(LibraryIndex::FILE_PATH);
+}
 }  // namespace
 
 CalibreSyncActivity::CalibreSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, OpdsServer server)
@@ -234,7 +240,6 @@ void CalibreSyncActivity::runSync() {
     return;
   }
 
-  bool libraryChanged = false;
   for (size_t i = 0; i < books.size(); ++i) {
     if (cancelRequested) break;
     const auto& book = books[i];
@@ -293,6 +298,7 @@ void CalibreSyncActivity::runSync() {
     }
     if (hadOldFile) Storage.remove(backup.c_str());
     invalidateBookCachePreservingProgress(destination);
+    invalidateLibraryEntry(destination);
     if (isNew) {
       records.push_back(CalibreSyncRecord{key, book.id, book.sha256, destination});
       ++added;
@@ -301,12 +307,10 @@ void CalibreSyncActivity::runSync() {
       old->path = destination;
       ++updated;
     }
-    libraryChanged = true;
   }
 
   if (cancelRequested) {
     CalibreSyncStore::save(records);
-    if (libraryChanged) Storage.remove(LibraryIndex::FILE_PATH);
     state = CANCELLED;
     requestUpdate();
     return;
@@ -319,10 +323,10 @@ void CalibreSyncActivity::runSync() {
     for (auto it = records.begin(); it != records.end();) {
       if (it->serverUrl == key && !containsBookId(books, it->bookId)) {
         clearBookCache(it->path);
+        invalidateLibraryEntry(it->path);
         if (!Storage.exists(it->path.c_str()) || Storage.remove(it->path.c_str())) {
           it = records.erase(it);
           ++removed;
-          libraryChanged = true;
           continue;
         }
         ++errors;
@@ -334,7 +338,6 @@ void CalibreSyncActivity::runSync() {
   if (!CalibreSyncStore::save(records)) {
     state = FAILED;
   } else {
-    if (libraryChanged) Storage.remove(LibraryIndex::FILE_PATH);
     state = COMPLETE;
   }
   requestUpdate();
