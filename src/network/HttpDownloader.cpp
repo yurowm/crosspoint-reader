@@ -18,6 +18,7 @@ extern "C" void wolfSSL_Arduino_Serial_Print(const char* const msg) { LOG_DBG("W
 #if !defined(FREEINK_NET_WOLFSSL) || FREEINK_DEVICE_X4PRO
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
+#include <esp_timer.h>
 #endif
 
 namespace {
@@ -47,6 +48,7 @@ struct Sink {
   bool* cancelFlag = nullptr;
   size_t total = 0;
   size_t downloaded = 0;
+  const char* kind = "memory";
 };
 
 bool isRedirect(int status) {
@@ -212,25 +214,41 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     return HttpDownloader::HTTP_ERROR;
   }
 
+  const int64_t transferStartedUs = esp_timer_get_time();
+  int64_t networkUs = 0;
+  int64_t sinkUs = 0;
+  int64_t progressUs = 0;
+  size_t readCalls = 0;
   while (true) {
     if (sink.cancelFlag && *sink.cancelFlag) {
       esp_http_client_cleanup(client);
       return HttpDownloader::ABORTED;
     }
+    const int64_t networkStartedUs = esp_timer_get_time();
     const int read = esp_http_client_read(client, buf.get(), READ_CHUNK);
+    networkUs += esp_timer_get_time() - networkStartedUs;
+    ++readCalls;
     if (read < 0) {
       LOG_ERR("HTTP", "read error after %zu bytes", sink.downloaded);
       esp_http_client_cleanup(client);
       return HttpDownloader::HTTP_ERROR;
     }
     if (read == 0) break;  // all data received
-    if (!sink.write(reinterpret_cast<const uint8_t*>(buf.get()), read)) {
+    const int64_t sinkStartedUs = esp_timer_get_time();
+    const bool written = sink.write(reinterpret_cast<const uint8_t*>(buf.get()), read);
+    sinkUs += esp_timer_get_time() - sinkStartedUs;
+    if (!written) {
       esp_http_client_cleanup(client);
       return HttpDownloader::FILE_ERROR;
     }
     sink.downloaded += read;
-    if (sink.progress && sink.total > 0) sink.progress(sink.downloaded, sink.total);
+    if (sink.progress && sink.total > 0) {
+      const int64_t progressStartedUs = esp_timer_get_time();
+      sink.progress(sink.downloaded, sink.total);
+      progressUs += esp_timer_get_time() - progressStartedUs;
+    }
   }
+  const int64_t transferUs = esp_timer_get_time() - transferStartedUs;
 
   const bool complete = esp_http_client_is_complete_data_received(client);
   esp_http_client_cleanup(client);
@@ -238,6 +256,12 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     LOG_ERR("HTTP", "incomplete: got %zu of %zu bytes", sink.downloaded, sink.total);
     return HttpDownloader::HTTP_ERROR;
   }
+  const uint64_t bytesPerSecond =
+      transferUs > 0 ? static_cast<uint64_t>(sink.downloaded) * 1000000ULL / static_cast<uint64_t>(transferUs) : 0;
+  LOG_INF("HTTP", "Perf %s: %zu bytes, %llu B/s, total=%lld ms net=%lld ms sink=%lld ms ui=%lld ms reads=%zu",
+          sink.kind, sink.downloaded, static_cast<unsigned long long>(bytesPerSecond),
+          static_cast<long long>(transferUs / 1000), static_cast<long long>(networkUs / 1000),
+          static_cast<long long>(sinkUs / 1000), static_cast<long long>(progressUs / 1000), readCalls);
   return HttpDownloader::OK;
 }
 #endif  // !FREEINK_NET_WOLFSSL || FREEINK_DEVICE_X4PRO
@@ -298,6 +322,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   }
 
   Sink sink;
+  sink.kind = "SD";
   sink.progress = std::move(progress);
   sink.cancelFlag = cancelFlag;
   sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
